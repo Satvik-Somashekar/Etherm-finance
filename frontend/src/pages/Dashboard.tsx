@@ -4,7 +4,8 @@ import { GlassCard } from '../components/GlassCard'
 import { Icon } from '../components/Icon'
 import { Money } from '../components/Money'
 import { Sparkline } from '../components/Sparkline'
-import { accounts, insights, netWorthSeries, transactions } from '../data/mock'
+import { insights, netWorthSeries, transactions } from '../data/mock'
+import { useAccounts } from '../state/AccountsContext'
 import { FI_TYPE_ICON, FI_TYPE_LABEL, type FiType } from '../types/fi'
 import { timeAgo } from '../lib/format'
 
@@ -22,20 +23,31 @@ const ALLOCATION_COLOUR: Record<FiType, string> = {
 export function Dashboard() {
   const [range, setRange] = useState<Range>('1Y')
 
-  // Linked accounts only — a pending consent grants no access to balances.
-  const linked = useMemo(() => accounts.filter((a) => a.consent.status === 'ACTIVE'), [])
-  const netWorth = useMemo(() => linked.reduce((sum, a) => sum + a.balance, 0), [linked])
+  // Same source as the Accounts screen, so the two can never disagree.
+  const { accounts, netWorth } = useAccounts()
 
-  const series = useMemo(
-    () => netWorthSeries.slice(netWorthSeries.length - RANGES[range]),
-    [range],
+  // Linked accounts only — a pending consent grants no access to balances.
+  const linked = useMemo(
+    () => accounts.filter((a) => a.consent.status === 'ACTIVE'),
+    [accounts],
   )
+
+  // The history is fixed mock data, but its final point is today's real total,
+  // so the chart and the change percentage track linking and unlinking.
+  const series = useMemo(() => {
+    const window = netWorthSeries.slice(netWorthSeries.length - RANGES[range])
+    return window.map((point, index) =>
+      index === window.length - 1 ? { ...point, value: netWorth } : point,
+    )
+  }, [range, netWorth])
   const changePct = useMemo(() => {
     const first = series[0].value
+    if (!first) return 0
     return ((series[series.length - 1].value - first) / first) * 100
   }, [series])
 
   const allocation = useMemo(() => {
+    if (netWorth === 0) return []
     const byType = new Map<FiType, number>()
     for (const account of linked) {
       byType.set(account.fiType, (byType.get(account.fiType) ?? 0) + account.balance)
@@ -119,6 +131,11 @@ export function Dashboard() {
             <Icon name="pie_chart" className="text-primary" />
           </h2>
           <div className="space-y-6">
+            {allocation.length === 0 && (
+              <p className="text-body-md text-on-surface-variant">
+                No linked accounts yet. Link one from the Accounts screen to see your allocation.
+              </p>
+            )}
             {allocation.map((slice, index) => (
               <div key={slice.fiType} className="space-y-2">
                 <div className="flex justify-between text-label-md">

@@ -1,35 +1,22 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { GlassCard } from '../components/GlassCard'
 import { Icon } from '../components/Icon'
 import { Money } from '../components/Money'
-import { ConnectAccountModal, type LinkRequest } from '../components/ConnectAccountModal'
-import { accounts as seedAccounts, SEED_BALANCE } from '../data/mock'
+import { ConnectAccountModal } from '../components/ConnectAccountModal'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { useAccounts, type LinkRequest } from '../state/AccountsContext'
 import { FI_TYPE_ICON, FI_TYPE_LABEL, type FipAccount, type FiType } from '../types/fi'
 import { daysUntil, timeAgo } from '../lib/format'
 
 type Filter = FiType | 'ALL'
 
-/** How long a freshly approved consent spends in "syncing" before data lands. */
-const SYNC_MS = 1800
-
-/** Opening balance for a newly linked account, jittered so it does not look canned. */
-function openingBalance(fiType: FiType): number {
-  return Math.round(SEED_BALANCE[fiType] * (0.85 + Math.random() * 0.3))
-}
-
 export function Accounts() {
-  const [filter, setFilter] = useState<Filter>('ALL')
+  const { accounts: list, syncingIds, netWorth, availableFips, link, remove } = useAccounts()
 
-  // Seeded from the mock module but cloned, so the connect flow never mutates it.
-  const [list, setList] = useState<FipAccount[]>(() =>
-    seedAccounts.map((account) => ({ ...account, consent: { ...account.consent } })),
-  )
-  const [syncingIds, setSyncingIds] = useState<string[]>([])
+  const [filter, setFilter] = useState<Filter>('ALL')
   const [modalOpen, setModalOpen] = useState(false)
   const [approvingAccount, setApprovingAccount] = useState<FipAccount | null>(null)
-
-  const timers = useRef<number[]>([])
-  useEffect(() => () => timers.current.forEach(window.clearTimeout), [])
+  const [removing, setRemoving] = useState<FipAccount | null>(null)
 
   const counts = useMemo(() => {
     const map = new Map<FiType, number>()
@@ -44,14 +31,6 @@ export function Accounts() {
     [filter, list],
   )
 
-  const aggregated = useMemo(
-    () =>
-      list
-        .filter((a) => a.consent.status === 'ACTIVE')
-        .reduce((sum, a) => sum + a.balance, 0),
-    [list],
-  )
-
   const filters: Filter[] = ['ALL', ...counts.keys()]
 
   function openPicker() {
@@ -64,59 +43,16 @@ export function Accounts() {
     setModalOpen(true)
   }
 
-  /**
-   * Consent approved: the account goes active immediately but with no data yet,
-   * then flips to synced once the simulated first fetch completes.
-   */
   function handleApprove(request: LinkRequest) {
     setModalOpen(false)
-
-    const id = request.accountId ?? `acc-${request.candidate!.fipId.toLowerCase()}-${Date.now()}`
-    const fiType = request.candidate?.fiType ?? approvingAccount!.fiType
-
-    setList((current) => {
-      if (request.accountId) {
-        return current.map((account) =>
-          account.id === request.accountId
-            ? { ...account, consent: request.consent, balance: 0, lastSyncedAt: null }
-            : account,
-        )
-      }
-      const candidate = request.candidate!
-      return [
-        ...current,
-        {
-          id,
-          fipName: candidate.fipName,
-          fipId: candidate.fipId,
-          fiType: candidate.fiType,
-          maskedAccountNumber: candidate.maskedAccountNumber,
-          balance: 0,
-          lastSyncedAt: null,
-          consent: request.consent,
-        },
-      ]
-    })
-
-    setSyncingIds((current) => [...current, id])
     setApprovingAccount(null)
+    link(request)
+  }
 
-    const timer = window.setTimeout(() => {
-      setList((current) =>
-        current.map((account) =>
-          account.id === id
-            ? {
-                ...account,
-                balance: openingBalance(fiType),
-                lastSyncedAt: new Date().toISOString(),
-              }
-            : account,
-        ),
-      )
-      setSyncingIds((current) => current.filter((value) => value !== id))
-    }, SYNC_MS)
-
-    timers.current.push(timer)
+  function confirmRemove() {
+    if (!removing) return
+    remove(removing.id)
+    setRemoving(null)
   }
 
   return (
@@ -197,7 +133,7 @@ export function Accounts() {
             <div>
               <span className="label-technical mb-2 block">Aggregated Balance</span>
               <Money
-                value={aggregated}
+                value={netWorth}
                 variant="split"
                 className="text-[40px] leading-none tracking-tighter text-on-surface sm:text-[64px]"
                 fractionClassName="text-on-surface-variant/50 text-headline-md"
@@ -242,14 +178,24 @@ export function Accounts() {
                   <p className="mb-6 font-mono text-label-sm uppercase text-on-surface-variant">
                     {FI_TYPE_LABEL[account.fiType]} · {account.maskedAccountNumber}
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => openApproval(account)}
-                    className="flex items-center gap-1 text-label-md text-primary transition-opacity hover:opacity-80"
-                  >
-                    Approve in AA app
-                    <Icon name="arrow_forward" size={18} />
-                  </button>
+                  <div className="flex items-center justify-between gap-4">
+                    <button
+                      type="button"
+                      onClick={() => openApproval(account)}
+                      className="flex items-center gap-1 text-label-md text-primary transition-opacity hover:opacity-80"
+                    >
+                      Approve in AA app
+                      <Icon name="arrow_forward" size={18} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRemoving(account)}
+                      aria-label={`Cancel consent request for ${account.fipName}`}
+                      className="p-2 text-outline-variant transition-colors hover:text-error"
+                    >
+                      <Icon name="delete" size={20} />
+                    </button>
+                  </div>
                 </div>
               )
             }
@@ -289,9 +235,19 @@ export function Accounts() {
                       fractionClassName="text-label-sm text-on-surface-variant"
                     />
                   )}
-                  <div className="mt-6 flex items-center gap-2 border-t border-outline-variant/20 pt-4 text-label-sm text-on-surface-variant">
-                    <Icon name="schedule" size={14} />
-                    Consent expires in {daysUntil(account.consent.consentExpiry)} days
+                  <div className="mt-6 flex items-center justify-between gap-2 border-t border-outline-variant/20 pt-4 text-label-sm text-on-surface-variant">
+                    <span className="flex items-center gap-2">
+                      <Icon name="schedule" size={14} />
+                      Consent expires in {daysUntil(account.consent.consentExpiry)} days
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setRemoving(account)}
+                      aria-label={`Revoke consent and unlink ${account.fipName}`}
+                      className="-mr-2 p-2 text-outline-variant opacity-0 transition-colors hover:text-error focus-visible:opacity-100 group-hover:opacity-100"
+                    >
+                      <Icon name="link_off" size={20} />
+                    </button>
                   </div>
                 </div>
               </GlassCard>
@@ -303,13 +259,52 @@ export function Accounts() {
       <ConnectAccountModal
         open={modalOpen}
         account={approvingAccount}
-        linkedFipIds={list.map((a) => a.fipId)}
+        candidates={availableFips}
         onClose={() => {
           setModalOpen(false)
           setApprovingAccount(null)
         }}
         onApprove={handleApprove}
       />
+
+      <ConfirmDialog
+        open={removing !== null}
+        icon={removing?.consent.status === 'PENDING' ? 'cancel' : 'link_off'}
+        title={
+          removing?.consent.status === 'PENDING'
+            ? 'Cancel consent request?'
+            : 'Revoke consent and unlink?'
+        }
+        confirmLabel={removing?.consent.status === 'PENDING' ? 'Cancel request' : 'Revoke & unlink'}
+        cancelLabel="Keep account"
+        onCancel={() => setRemoving(null)}
+        onConfirm={confirmRemove}
+      >
+        {removing && (
+          <>
+            <p>
+              <span className="text-on-surface">{removing.fipName}</span>{' '}
+              <span className="font-mono text-label-sm uppercase">
+                · {removing.maskedAccountNumber}
+              </span>{' '}
+              will be unlinked, and {removing.fipName} will stop sharing data under consent{' '}
+              <span className="font-mono text-label-sm">{removing.consent.consentId}</span>.
+            </p>
+            {removing.consent.status === 'ACTIVE' && (
+              <p className="flex items-center justify-between rounded-md border border-outline-variant/30 bg-surface-container-lowest/50 px-4 py-3">
+                <span className="text-label-sm uppercase tracking-wider">
+                  Removed from your total
+                </span>
+                <Money value={removing.balance} className="text-label-md text-error" />
+              </p>
+            )}
+            <p className="text-label-sm">
+              You can link it again at any time, but the historical data fetched under this consent
+              will not be restored.
+            </p>
+          </>
+        )}
+      </ConfirmDialog>
     </div>
   )
 }

@@ -23,7 +23,14 @@ mvn clean install
 
 ## Run a service
 
-Use a separate terminal for each service, because the default HTTP port is `8080`.
+Each service binds its own port, so all four can run at once — one terminal each.
+
+| Module | Port |
+| --- | --- |
+| `ingestion` | 8081 |
+| `normalization` | 8082 |
+| `retrieval` | 8083 |
+| `rag-service` | 8084 |
 
 ```bash
 mvn -pl ingestion spring-boot:run
@@ -32,7 +39,7 @@ mvn -pl ingestion spring-boot:run
 Verify it is running:
 
 ```bash
-curl http://localhost:8080/actuator/health
+curl http://localhost:8081/actuator/health
 ```
 
 Expected response:

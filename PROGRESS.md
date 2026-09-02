@@ -107,25 +107,19 @@ its routes, and the data strategy.
 
 ## Known issues
 
-- **Port collision.** All four Spring modules default to 8080, so the README's
-  "a separate terminal for each service" only works one service at a time.
-  Assigning 8081–8084 would fix it.
-- **`PLAN_60_PERCENT.md`** in the repo root was written by a separate session
-  and is stale — it describes `src/pages/` as empty and `App.tsx` as the default
-  Vite template, neither of which is true any more.
-- **Frontend data is client-side only.** Every figure resets on reload; the
-  connect flow mutates React state, not a store.
+- **Frontend data is client-side only.** Linked accounts persist to
+  localStorage, but everything else (Oracle transcript, Privacy Mode) resets on
+  reload, and nothing is backed by a server.
 
 ## Suggested next steps
 
 1. Commit what exists — the frontend is a substantial body of untracked work.
-2. Fix the port collision so the four services can run together.
-3. Define the API contract the frontend already implies: account list, aggregate
+2. Define the API contract the frontend already implies: account list, aggregate
    balance, transactions, and `POST /query` returning an answer plus source
    record IDs.
-4. Build `ingestion` + `normalization` against the same FI shapes as
+3. Build `ingestion` + `normalization` against the same FI shapes as
    `types/fi.ts`, with a real Java-side mock data generator behind them.
-5. Replace `data/mock.ts` with a typed API client — the type layer already
+4. Replace `data/mock.ts` with a typed API client — the type layer already
    matches, so this should be a data-source swap rather than a UI rewrite.
-6. Wire `retrieval` and `rag-service`, keeping aggregates computed in code and
+5. Wire `retrieval` and `rag-service`, keeping aggregates computed in code and
    returning the record IDs the UI already renders as citations.

@@ -1,24 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Icon } from './Icon'
-import { fipCatalogue, type FipCandidate } from '../data/mock'
+import type { FipCandidate } from '../data/mock'
 import { FI_TYPE_ICON, FI_TYPE_LABEL, type ConsentArtifact, type FipAccount } from '../types/fi'
+import type { LinkRequest } from '../state/AccountsContext'
 import { formatDate } from '../lib/format'
-
-/** What the modal hands back once the user approves the consent request. */
-export interface LinkRequest {
-  /** Set when approving an account that already exists in the list. */
-  accountId?: string
-  /** Set when linking a brand-new FIP from the catalogue. */
-  candidate?: FipCandidate
-  consent: ConsentArtifact
-}
 
 interface ConnectAccountModalProps {
   open: boolean
   /** When provided, the FIP picker is skipped and consent runs for this account. */
   account?: FipAccount | null
-  /** FIPs already linked — filtered out of the picker so nothing is duplicated. */
-  linkedFipIds: string[]
+  /** Providers available to link — already excludes anything currently linked. */
+  candidates: FipCandidate[]
   onClose: () => void
   onApprove: (request: LinkRequest) => void
 }
@@ -46,7 +38,7 @@ function draftConsent(fiType: FipCandidate['fiType']): ConsentArtifact {
 export function ConnectAccountModal({
   open,
   account,
-  linkedFipIds,
+  candidates,
   onClose,
   onApprove,
 }: ConnectAccountModalProps) {
@@ -77,11 +69,6 @@ export function ConnectAccountModal({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose])
-
-  const available = useMemo(
-    () => fipCatalogue.filter((fip) => !linkedFipIds.includes(fip.fipId)),
-    [linkedFipIds],
-  )
 
   const consent = useMemo(
     () => (selected ? draftConsent(selected.fiType) : null),
@@ -168,12 +155,12 @@ export function ConnectAccountModal({
 
           {step === 'pick' && (
             <div className="space-y-2">
-              {available.length === 0 && (
+              {candidates.length === 0 && (
                 <p className="rounded-md border border-outline-variant/30 bg-surface-container/40 p-6 text-center text-body-md text-on-surface-variant">
-                  Every provider in the catalogue is already linked.
+                  Every provider is already linked.
                 </p>
               )}
-              {available.map((fip) => (
+              {candidates.map((fip) => (
                 <button
                   key={fip.fipId}
                   type="button"
