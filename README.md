@@ -19,7 +19,7 @@ The read path is **Allow → Find → Add → Phrase**:
    consents are used, and each one limits what can be read to its FI types, providers and data
    range. A revoked consent returns 403 and its fetched data is deleted.
 2. **Find.** A deterministic parser turns the question into a plan: an intent (spend, income,
-   premiums, net worth, holdings and so on), categories and a date range. Retrieval returns the
+   savings rate, top merchants, monthly trend, premiums, net worth, holdings and so on), categories and a date range. Retrieval returns the
    normalised records that match the plan within the consents.
 3. **Add.** Java computes every number in `BigDecimal`: totals, counts, breakdowns, top-N and
    comparisons with the previous period. Each figure carries the ids of the records it came from.
@@ -116,7 +116,7 @@ Latest results ([full report](evaluation/results/REPORT.md)):
 
 | Metric | Dev set | Held-out set |
 | --- | --- | --- |
-| Answerable questions | 1,140 | 585 |
+| Answerable questions | 1,380 | 705 |
 | Intent accuracy | 100% | 100% |
 | Exact-match answers, to the paisa | 100% | 100% |
 | Citation precision / recall | 1.000 / 1.000 | 1.000 / 1.000 |
@@ -132,7 +132,10 @@ being declined ([baseline](evaluation/results/BASELINE.md)). Once the intent and
 parsed correctly, the computed answer was exact in 99.5% and 100% of cases. The one exception was a
 parser bug that read "portfolio" as a mutual fund folio.
 
-These numbers have limits. The questions come from 58 answerable phrasings, repeated across 8
+The savings rate, top merchants and monthly trend questions were added after the held-out set was
+written, so their held-out phrasings were written alongside the code and are not a blind test.
+
+These numbers have limits. The questions come from 67 answerable phrasings, repeated across 8
 periods and 5 users, so the wording is much less varied than the count suggests. The same people
 wrote the parser and the questions. The remaining miss ("How do I file my income tax return?" is
 answered as an income question) is left in to show what the keyword parser still gets wrong.
