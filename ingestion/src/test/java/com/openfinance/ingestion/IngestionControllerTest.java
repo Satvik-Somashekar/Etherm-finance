@@ -27,7 +27,7 @@ class IngestionControllerTest {
     ObjectMapper mapper;
 
     @Test
-    void ingestsFetchResponseAndListsAccountsByType() throws Exception {
+    void ingestsFetchResponseAndListsCustomer() throws Exception {
         var payload = new SyntheticDataGenerator(42, LocalDate.of(2025, 10, 1), LocalDate.of(2026, 9, 30)).generate(4);
 
         mvc.perform(post("/api/fi/fetch-responses").contentType(MediaType.APPLICATION_JSON)
@@ -37,10 +37,9 @@ class IngestionControllerTest {
                 .andExpect(jsonPath("$.accounts").value(6))
                 .andExpect(jsonPath("$.accountsByType.INSURANCE_POLICIES").value(2));
 
-        mvc.perform(get("/api/customers/user005@etherm-aa/accounts").param("fiType", "EPF"))
+        mvc.perform(get("/api/customers"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].account.type").value("epf"));
+                .andExpect(jsonPath("$", org.hamcrest.Matchers.hasItem("user005@etherm-aa")));
     }
 
     @Test

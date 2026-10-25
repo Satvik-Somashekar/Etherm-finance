@@ -1,9 +1,8 @@
 package com.openfinance.ingestion;
 
-import com.openfinance.core.model.FiType;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.openfinance.core.model.FiType;
 import com.openfinance.generator.SyntheticDataGenerator;
 import org.junit.jupiter.api.Test;
 

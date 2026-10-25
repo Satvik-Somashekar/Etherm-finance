@@ -1,8 +1,7 @@
 package com.openfinance.ingestion;
 
-import com.openfinance.core.model.FiType;
-
 import com.fasterxml.jackson.databind.JsonNode;
+import com.openfinance.core.model.FiType;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
@@ -74,7 +73,7 @@ public class FiPayloadParser {
                 if (!txns.isMissingNode() && !txns.isArray()) {
                     problems.add(where + " transactions.transaction must be an array");
                 }
-                accounts.add(new RawAccount(customerId, fipId, linkRef, text(entry, "maskedAccNumber"),
+                accounts.add(new RawAccount(customerId, null, fipId, linkRef, text(entry, "maskedAccNumber"),
                         fiType, txnId, now, account));
             }
         }

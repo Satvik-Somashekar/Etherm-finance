@@ -1,8 +1,7 @@
 package com.openfinance.ingestion;
 
-import com.openfinance.core.model.FiType;
-
 import com.fasterxml.jackson.databind.JsonNode;
+import com.openfinance.core.model.FiType;
 import org.springframework.stereotype.Service;
 
 import java.util.EnumMap;
