@@ -4,6 +4,8 @@ import com.openfinance.core.consent.ConsentViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -15,14 +17,21 @@ import org.springframework.web.client.HttpStatusCodeException;
 public class QueryController {
 
     private final QueryService service;
+    private final OverviewService overviews;
 
-    public QueryController(QueryService service) {
+    public QueryController(QueryService service, OverviewService overviews) {
         this.service = service;
+        this.overviews = overviews;
     }
 
     @PostMapping("/query")
     public QueryResponse query(@RequestBody QueryRequest request) {
         return service.answer(request);
+    }
+
+    @GetMapping("/customers/{customerId}/overview")
+    public OverviewResponse overview(@PathVariable String customerId) {
+        return overviews.overview(customerId);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

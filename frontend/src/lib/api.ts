@@ -1,4 +1,4 @@
-import type { ConsentArtifact, FipAccount, FiType } from '../types/fi'
+import type { ConsentArtifact, FipAccount, FiType, Insight, Transaction } from '../types/fi'
 import type { FipCandidate } from '../data/mock'
 
 /**
@@ -126,6 +126,32 @@ export interface QueryResult {
   }
 }
 
+interface BackendOverview {
+  asOf: string | null
+  history: { month: string; date: string; value: number; records: number }[]
+  activity: {
+    recordId: string
+    fipId: string
+    fiType: FiType
+    date: string
+    amount: number
+    direction: 'CREDIT' | 'DEBIT' | null
+    category: string
+    description: string
+    counterparty: string | null
+  }[]
+  insights: QueryResult[]
+}
+
+/** What the Dashboard shows beyond balances, all computed by the Java services. */
+export interface Overview {
+  asOf: string | null
+  /** Month-end net worth, rebuilt from transactions at today's prices. */
+  series: { month: string; value: number }[]
+  activity: Transaction[]
+  insights: Insight[]
+}
+
 // ------------------------------------------------------------------------- mapping
 
 function toConsent(c: BackendConsent): ConsentArtifact {
@@ -201,6 +227,45 @@ export async function linkProvider(fipId: string, fiTypes: FiType[]): Promise<vo
 
 export async function revokeConsent(consentId: string): Promise<void> {
   await call(`/svc/ingestion/api/consents/${consentId}/revoke`, { method: 'POST' })
+}
+
+const MONTH = new Intl.DateTimeFormat('en-IN', { month: 'short', timeZone: 'UTC' })
+
+/** Net-worth history, recent activity and insights for the Dashboard. */
+export async function loadOverview(): Promise<Overview> {
+  const o = await call<BackendOverview>(
+    `/svc/rag/api/customers/${encodeURIComponent(CUSTOMER_ID)}/overview`,
+  )
+  return {
+    asOf: o.asOf,
+    series: o.history.map((p) => ({
+      month: MONTH.format(new Date(`${p.month}-01T00:00:00Z`)),
+      value: Number(p.value),
+    })),
+    activity: o.activity.map((a) => ({
+      id: a.recordId,
+      accountId: a.recordId.split(':')[0],
+      narration: a.description,
+      counterparty: a.counterparty ?? fipName(a.fipId),
+      amount: Number(a.amount),
+      // Investment and policy records carry no direction; money flowing into them leaves the bank.
+      direction: a.direction ?? 'DEBIT',
+      valueDate: a.date,
+      fiType: a.fiType,
+    })),
+    insights: o.insights.map((r, index) => ({
+      id: `insight-${index}`,
+      title: r.answer,
+      body: '',
+      severity: 'info',
+      sources: r.citations.map((c) => ({
+        recordId: c.recordId,
+        fipName: fipName(c.fipId),
+        fiType: c.fiType,
+        label: c.description,
+      })),
+    })),
+  }
 }
 
 export async function ask(question: string): Promise<QueryResult> {

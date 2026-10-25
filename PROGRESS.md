@@ -12,7 +12,7 @@ challenges in [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md). How to run everything is
 | 2 | Aggregation / normalization | Done. Per-type normalisers in `fi-core`, served by `normalization`; simulated consent lifecycle in `ingestion` |
 | 3 | Retrieval layer | Done, as structured filtering. Embeddings were dropped under the cut line because every supported question maps to a filter |
 | 4 | RAG query service | Done. `rag-service` parses, retrieves, computes in Java and phrases with templates, or with Claude when a key is set |
-| 5 | Query interface | Accounts, Oracle and Consent screens use the live services. Parts of the Dashboard are still mock |
+| 5 | Query interface | All four screens use the live services; the profile and device sessions on the Consent screen are still mock |
 
 ## Technical challenges
 

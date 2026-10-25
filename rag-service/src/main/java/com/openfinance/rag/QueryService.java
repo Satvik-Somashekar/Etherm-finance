@@ -59,7 +59,7 @@ public class QueryService {
                         computed.citations().size(), today));
     }
 
-    private List<String> consents(QueryRequest request) {
+    List<String> consents(QueryRequest request) {
         if (request.consentIds() != null && !request.consentIds().isEmpty()) {
             return request.consentIds();
         }
