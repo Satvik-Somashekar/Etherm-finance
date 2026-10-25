@@ -1,4 +1,13 @@
 target/
+data/synthetic/
 .idea/
 *.iml
 .DS_Store
+
+# frontend
+node_modules/
+dist/
+*.local
+
+# evaluation run output; REPORT.md and BASELINE.md are kept
+evaluation/results/results.json

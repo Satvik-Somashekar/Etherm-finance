@@ -20,6 +20,8 @@
     <description>Account Aggregator-inspired financial data platform</description>
 
     <modules>
+        <module>fi-core</module>
+        <module>data-generator</module>
         <module>ingestion</module>
         <module>normalization</module>
         <module>retrieval</module>

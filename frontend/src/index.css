@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    @apply bg-background font-sans text-body-md text-on-background antialiased;
+    overscroll-behavior: none;
+  }
+
+  /* The ethereal aesthetic relies on the page never showing a hard scrollbar edge. */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-outline-variant/40;
+  }
+
+  ::selection {
+    @apply bg-primary/30 text-on-surface;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-primary/60 ring-offset-2 ring-offset-background;
+  }
+}
+
+@layer components {
+  /*
+   * Level 1 surface from DESIGN.md: semi-transparent container + 20px background
+   * blur + a hairline white border so the edge catches "light".
+   */
+  .glass {
+    @apply rounded-lg border border-white/5 bg-surface/60 shadow-xl backdrop-blur-card;
+  }
+
+  /* Floating elements: lighter tint, deeper blur, 1px white stroke at 10%. */
+  .glass-floating {
+    @apply rounded-xl border border-white/10 bg-surface-container/40 backdrop-blur-floating;
+  }
+
+  .label-technical {
+    @apply text-label-sm uppercase tracking-[0.2em] text-on-surface-variant;
+  }
+}
+
+@layer utilities {
+  /* Diffused violet bloom used behind hero and section corners. */
+  .aura {
+    @apply pointer-events-none absolute rounded-full mix-blend-screen blur-[120px];
+  }
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  user-select: none;
+}

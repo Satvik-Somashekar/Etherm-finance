@@ -1,3 +1,6 @@
+server:
+  port: 8082
+
 spring:
   application:
     name: normalization
@@ -7,3 +10,7 @@ management:
     web:
       exposure:
         include: health,info
+
+etherm:
+  services:
+    ingestion: ${ETHERM_INGESTION_URL:http://localhost:8081}
