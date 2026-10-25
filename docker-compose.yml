@@ -1,0 +1,47 @@
+# Runs the four backend services on their usual ports with the synthetic data mounted.
+# Prerequisites: `mvn clean install` (builds the jars) and the data generator (fills data/synthetic).
+# The frontend runs on the host with `npm --prefix frontend run dev`; its proxy targets localhost:8081-8084.
+
+x-service: &service
+  restart: unless-stopped
+
+services:
+  ingestion:
+    <<: *service
+    build: { context: ., args: { MODULE: ingestion } }
+    ports: ["8081:8081"]
+    environment:
+      ETHERM_SEED_DIR: /data/synthetic
+    volumes:
+      - ./data/synthetic:/data/synthetic:ro
+
+  normalization:
+    <<: *service
+    build: { context: ., args: { MODULE: normalization } }
+    ports: ["8082:8082"]
+    environment:
+      ETHERM_INGESTION_URL: http://ingestion:8081
+    depends_on: [ingestion]
+
+  retrieval:
+    <<: *service
+    build: { context: ., args: { MODULE: retrieval } }
+    ports: ["8083:8083"]
+    environment:
+      ETHERM_INGESTION_URL: http://ingestion:8081
+      ETHERM_NORMALIZATION_URL: http://normalization:8082
+    depends_on: [ingestion, normalization]
+
+  rag-service:
+    <<: *service
+    build: { context: ., args: { MODULE: rag-service } }
+    ports: ["8084:8084"]
+    environment:
+      ETHERM_INGESTION_URL: http://ingestion:8081
+      ETHERM_RETRIEVAL_URL: http://retrieval:8083
+      # Pin "today" so relative periods ("last quarter") land inside the synthetic data window.
+      ETHERM_AS_OF: ${ETHERM_AS_OF:-2026-10-25}
+      # Set ETHERM_PHRASING=claude and ANTHROPIC_API_KEY to let Claude phrase answers; templates otherwise.
+      ETHERM_PHRASING: ${ETHERM_PHRASING:-template}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    depends_on: [ingestion, retrieval]
