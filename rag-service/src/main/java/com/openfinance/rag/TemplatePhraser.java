@@ -27,11 +27,11 @@ public class TemplatePhraser implements AnswerPhraser {
     String template(ComputedAnswer answer) {
         QueryPlan plan = answer.plan();
         FactSheet facts = FactSheet.of(answer);
-        String period = plan.period() == null ? "across your consented data" : plan.period().label();
+        String period = plan.period() == null ? "over the period you have shared" : plan.period().label();
         if (answer.empty()) {
             return switch (plan.intent()) {
                 case UNSUPPORTED -> UNSUPPORTED;
-                default -> "I found no matching records " + period + " in the accounts you have shared.";
+                default -> "I found no matching records " + (plan.period() == null ? "" : period + " ") + "in the accounts you have shared.";
             };
         }
         String top = facts.label(1) == null ? "" : facts.label(1);

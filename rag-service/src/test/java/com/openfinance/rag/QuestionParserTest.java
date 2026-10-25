@@ -38,9 +38,21 @@ class QuestionParserTest {
             "Which stocks do I hold?|HOLDINGS",
             "What is my life cover?|INSURANCE_COVER",
             "Should I buy a house?|UNSUPPORTED",
+            // Gaps found by evaluation/evaluate.py
+            "How much money went out of my account last month?|SPEND_TOTAL",
+            "How much money came in last quarter?|INCOME",
+            "What did my insurance cost in FY 2025-26?|PREMIUMS_PAID",
+            "What is my stock portfolio worth?|BALANCE",
+            "Should I buy more Infosys shares?|UNSUPPORTED",
+            "Is now a good time to invest in mutual funds?|UNSUPPORTED",
     })
     void recognisesIntent(String question, Intent expected) {
         assertThat(parse(question).intent()).isEqualTo(expected);
+    }
+
+    @Test
+    void portfolioIsNotAMutualFundFolio() {
+        assertThat(parse("What is my stock portfolio worth?").fiTypes()).containsExactly(FiType.EQUITIES);
     }
 
     @Test

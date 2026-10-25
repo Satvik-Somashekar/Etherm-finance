@@ -67,12 +67,17 @@ public class QuestionParser {
     // ----------------------------------------------------------------- intent
 
     private QueryPlan intent(String q) {
+        // Advice and forecasts are out of scope: answering them with a balance would look like a recommendation.
+        if (has(q, " should i ", " should we ", " good time ", " will ", " going to ", " predict", " forecast",
+                " recommend", " advice", " advise", " best ")) {
+            return QueryPlan.of(Intent.UNSUPPORTED);
+        }
         if (has(q, "biggest", "largest", "highest", " top ") && has(q, "expense", "spend", "purchase", "transaction", "payment", "debit")) {
             Matcher m = TOP_N.matcher(q);
             int n = m.find() ? Integer.parseInt(m.group(1) != null ? m.group(1) : m.group(2)) : 5;
             return QueryPlan.of(Intent.TOP_EXPENSES).withTopN(Math.max(1, Math.min(n, 20)));
         }
-        if (has(q, "premium")) {
+        if (has(q, "premium") || (has(q, "insurance", "policy", "policies") && has(q, "cost", " paid ", " pay ", "spend", "spent"))) {
             return QueryPlan.of(Intent.PREMIUMS_PAID);
         }
         if (has(q, "sum assured", "cover", "insured for", "insurance worth", "life insurance", "health insurance") && !has(q, "spend", "spent", "paid")) {
@@ -87,7 +92,7 @@ public class QuestionParser {
                     ? QueryPlan.of(Intent.EPF_CONTRIBUTIONS)
                     : QueryPlan.of(Intent.BALANCE).withFiTypes(Set.of(FiType.EPF));
         }
-        boolean mf = has(q, "mutual fund", " mf ", " mfs ", " sip", " fund ", " funds ", "folio");
+        boolean mf = has(q, "mutual fund", " mf ", " mfs ", " sip", " fund ", " funds ", " folio");
         boolean equity = has(q, "stock", "share", "equit", "demat", "portfolio of companies");
         if (mf && has(q, "invest", " sip", "put into", "put in", "bought", "purchase")) {
             return QueryPlan.of(Intent.MF_INVESTED);
@@ -105,7 +110,7 @@ public class QuestionParser {
         if (has(q, "net worth", "networth", "total assets", "total wealth", "worth overall", "how much am i worth", "all my accounts")) {
             return QueryPlan.of(Intent.BALANCE);
         }
-        if (has(q, "salary", "income", "earn", "paid me", "received", "credited")) {
+        if (has(q, "salary", "income", "earn", "paid me", "received", "credited", "came in", "come in", "inflow", "incoming")) {
             return has(q, "interest") ? QueryPlan.of(Intent.INCOME).withCategories(Set.of(Category.INTEREST))
                     : QueryPlan.of(Intent.INCOME);
         }
@@ -122,7 +127,7 @@ public class QuestionParser {
             }
         });
         // A spending category on its own ("rent last month") is enough to mean spending.
-        if (!cats.isEmpty() || has(q, "spend", "spent", "expense", "expenditure", " paid ", " pay ", "cost me", "outflow")) {
+        if (!cats.isEmpty() || has(q, "spend", "spent", "expense", "expenditure", " paid ", " pay ", "cost me", "outflow", "went out", "gone out", "outgoing")) {
             return cats.isEmpty() ? QueryPlan.of(Intent.SPEND_TOTAL)
                     : QueryPlan.of(Intent.SPEND_CATEGORY).withCategories(cats);
         }
