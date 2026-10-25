@@ -6,6 +6,9 @@ import { Dashboard } from './pages/Dashboard'
 import { Accounts } from './pages/Accounts'
 import { AiOracle } from './pages/AiOracle'
 import { Consent } from './pages/Consent'
+import { Login } from './pages/Login'
+import { AccountsProvider } from './state/AccountsContext'
+import { useAuth } from './state/AuthContext'
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -15,7 +18,7 @@ function ScrollToTop() {
   return null
 }
 
-export function App() {
+function Shell() {
   // The Oracle is a full-height app view: a page footer under it would make the
   // window scroll on top of the chat's own scroll container.
   const chromeless = useLocation().pathname === '/oracle'
@@ -35,5 +38,16 @@ export function App() {
       </main>
       {!chromeless && <Footer />}
     </div>
+  )
+}
+
+export function App() {
+  const { user } = useAuth()
+  if (!user) return <Login />
+  // Keyed by customer so no account, balance or answer from one user can show for the next.
+  return (
+    <AccountsProvider key={user.id}>
+      <Shell />
+    </AccountsProvider>
   )
 }

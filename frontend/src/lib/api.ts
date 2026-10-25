@@ -1,12 +1,12 @@
 import type { ConsentArtifact, FipAccount, FiType, Insight, Transaction } from '../types/fi'
 import type { FipCandidate } from '../data/mock'
+import { currentCustomerId } from './session'
 
 /**
  * Typed client for the Etherm backend, reached through the Vite proxy (see vite.config.ts).
  * Every figure the UI shows from here was computed by the Java services.
  */
 
-export const CUSTOMER_ID: string = import.meta.env.VITE_CUSTOMER_ID ?? 'user001@etherm-aa'
 
 /** Display names for the simulated providers in the synthetic dataset. */
 const FIP_NAMES: Record<string, string> = {
@@ -187,7 +187,7 @@ function toAccount(view: AccountView): FipAccount {
 /** Accounts shared through the customer's active consents, valued by the Java services. */
 export async function loadLinkedAccounts(): Promise<FipAccount[]> {
   const views = await call<AccountView[]>(
-    `/svc/normalization/api/customers/${encodeURIComponent(CUSTOMER_ID)}/accounts`,
+    `/svc/normalization/api/customers/${encodeURIComponent(currentCustomerId())}/accounts`,
   )
   return views.map(toAccount)
 }
@@ -195,7 +195,7 @@ export async function loadLinkedAccounts(): Promise<FipAccount[]> {
 /** Providers holding the customer's accounts (account discovery: masked numbers only). */
 export async function discoverProviders(): Promise<FipCandidate[]> {
   const found = await call<DiscoveredAccount[]>(
-    `/svc/ingestion/api/customers/${encodeURIComponent(CUSTOMER_ID)}/fips`,
+    `/svc/ingestion/api/customers/${encodeURIComponent(currentCustomerId())}/fips`,
   )
   return found.map((a) => ({
     fipId: a.fipId,
@@ -212,7 +212,7 @@ export async function linkProvider(fipId: string, fiTypes: FiType[]): Promise<vo
   const consent = await call<BackendConsent>('/svc/ingestion/api/consents', {
     method: 'POST',
     body: JSON.stringify({
-      customerId: CUSTOMER_ID,
+      customerId: currentCustomerId(),
       fiTypes,
       fipIds: [fipId],
       purposeCode: '101',
@@ -234,7 +234,7 @@ const MONTH = new Intl.DateTimeFormat('en-IN', { month: 'short', timeZone: 'UTC'
 /** Net-worth history, recent activity and insights for the Dashboard. */
 export async function loadOverview(): Promise<Overview> {
   const o = await call<BackendOverview>(
-    `/svc/rag/api/customers/${encodeURIComponent(CUSTOMER_ID)}/overview`,
+    `/svc/rag/api/customers/${encodeURIComponent(currentCustomerId())}/overview`,
   )
   return {
     asOf: o.asOf,
@@ -271,6 +271,6 @@ export async function loadOverview(): Promise<Overview> {
 export async function ask(question: string): Promise<QueryResult> {
   return call<QueryResult>('/svc/rag/api/query', {
     method: 'POST',
-    body: JSON.stringify({ customerId: CUSTOMER_ID, question }),
+    body: JSON.stringify({ customerId: currentCustomerId(), question }),
   })
 }
