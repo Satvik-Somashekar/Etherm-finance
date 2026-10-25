@@ -20,6 +20,7 @@ public class DepositNormalizer implements AccountNormalizer {
     /** Narration rules, checked in order. The first fragment found decides the category. */
     private static final List<Map.Entry<String, Category>> DEBIT_RULES = List.of(
             Map.entry("ACH/SIP/", Category.SIP_DEBIT),
+            Map.entry("NEFT/DEMAT/", Category.INVESTMENT_DEBIT),
             Map.entry("ACH/PREMIUM/", Category.PREMIUM_DEBIT),
             Map.entry("/RENT/", Category.RENT),
             Map.entry("ATM/", Category.CASH_WITHDRAWAL),
@@ -75,6 +76,9 @@ public class DepositNormalizer implements AccountNormalizer {
 
     static Category creditCategory(String narration) {
         String upper = narration.toUpperCase(Locale.ROOT);
+        if (upper.contains("NEFT/DEMAT/")) {
+            return Category.INVESTMENT_CREDIT;
+        }
         if (upper.contains("SALARY")) {
             return Category.SALARY;
         }

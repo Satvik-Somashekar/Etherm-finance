@@ -18,6 +18,9 @@ public enum Category {
     TRANSPORT,
     CASH_WITHDRAWAL,
     SIP_DEBIT,
+    /** Money sent to, or received back from, the customer's own demat account. Not spending, not income. */
+    INVESTMENT_DEBIT,
+    INVESTMENT_CREDIT,
     PREMIUM_DEBIT,
     OTHER_DEBIT,
     // Investment and policy movements, recorded on the FIP that holds the asset

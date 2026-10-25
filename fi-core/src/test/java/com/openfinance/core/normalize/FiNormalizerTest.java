@@ -46,6 +46,8 @@ class FiNormalizerTest {
         assertThat(DepositNormalizer.debitCategory("ATM/CASH WITHDRAWAL")).isEqualTo(Category.CASH_WITHDRAWAL);
         assertThat(DepositNormalizer.debitCategory("UPI/SOMEONE/misc")).isEqualTo(Category.OTHER_DEBIT);
         assertThat(DepositNormalizer.creditCategory("NEFT/SALARY/NORTHWIND")).isEqualTo(Category.SALARY);
+        assertThat(DepositNormalizer.debitCategory("NEFT/DEMAT/FUNDS TRANSFER")).isEqualTo(Category.INVESTMENT_DEBIT);
+        assertThat(DepositNormalizer.creditCategory("NEFT/DEMAT/SALE PROCEEDS")).isEqualTo(Category.INVESTMENT_CREDIT);
         assertThat(DepositNormalizer.counterparty("UPI/FRESHMART/groceries")).isEqualTo("FRESHMART");
         assertThat(DepositNormalizer.counterparty("ACH/SIP/KESTREL MUTUAL FUND")).isEqualTo("KESTREL MUTUAL FUND");
     }

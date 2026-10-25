@@ -25,7 +25,7 @@ Read these numbers with their limits. The questions come from 58 answerable phra
 | Single-consent answers citing another provider | 0 of 150 |
 | Requests under a single consent that failed | 0 of 150 |
 | Revoked consent refused with 403 | 2 of 2 |
-| Latency p50 / p95 (local) | 39 ms / 48 ms over 1949 requests |
+| Latency p50 / p95 (local) | 50 ms / 118 ms over 1949 requests |
 
 ## By expected intent (both sets)
 
