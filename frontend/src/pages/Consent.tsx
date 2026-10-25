@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import { GlassCard } from '../components/GlassCard'
 import { Icon } from '../components/Icon'
-import { sessions } from '../data/mock'
 import { FI_TYPE_LABEL } from '../types/fi'
 import { daysUntil, formatDate } from '../lib/format'
 import { usePrivacy } from '../state/PrivacyContext'
@@ -183,49 +182,6 @@ export function Consent() {
                   <Icon name="arrow_forward" size={18} />
                 </button>
               </div>
-            </div>
-          </GlassCard>
-
-          <GlassCard className="bg-surface-container-lowest/70 p-6">
-            <h2 className="mb-6 flex items-center gap-2 text-headline-sm text-on-surface">
-              <Icon name="devices" className="text-on-surface-variant" />
-              Active Sessions
-            </h2>
-            <div className="flex flex-col gap-4">
-              {sessions.map((session, index) => (
-                <div key={session.id}>
-                  {index > 0 && <div className="mb-4 h-px w-full bg-outline-variant/20" />}
-                  <div className="group flex items-start justify-between">
-                    <div className="flex items-center gap-4">
-                      <div
-                        className={`flex h-10 w-10 items-center justify-center rounded ${
-                          session.current
-                            ? 'border border-primary/20 bg-surface-container text-primary shadow-glow-sm'
-                            : 'bg-surface-container text-on-surface-variant'
-                        }`}
-                      >
-                        <Icon name={session.icon} />
-                      </div>
-                      <div>
-                        <div className="text-label-md text-on-surface">{session.device}</div>
-                        <div className="mt-1 flex items-center gap-1 text-label-sm text-on-surface-variant">
-                          {session.current && (
-                            <span className="h-1.5 w-1.5 rounded-full bg-secondary" />
-                          )}
-                          {session.detail}
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      aria-label={`Sign out ${session.device}`}
-                      className="p-2 text-outline-variant opacity-0 transition-colors hover:text-error group-hover:opacity-100"
-                    >
-                      <Icon name="logout" size={20} />
-                    </button>
-                  </div>
-                </div>
-              ))}
             </div>
           </GlassCard>
         </div>

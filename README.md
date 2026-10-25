@@ -149,7 +149,7 @@ answered as an income question) is left in to show what the keyword parser still
 | --- | --- | --- |
 | `/accounts` | Linked Accounts | Live: accounts, balances and sync time come from the services. Linking a provider creates and approves a consent; removing one revokes it |
 | `/oracle` | AI Oracle | Live: questions go to `POST /api/query`, and answers show figures, a breakdown and record citations |
-| `/consent` | Consent & Security | Live consent ledger. The profile and active sessions are mock |
+| `/consent` | Consent & Security | Live consent ledger for the signed-in customer |
 | `/` | Dashboard | Live: net worth, allocation, a 12-month history rebuilt from transactions at today's prices (market moves are not reflected), recent activity, and three insights answered by the same pipeline as the Oracle (`GET /api/customers/{id}/overview`) |
 
 Sign-in is a demo picker for the five synthetic customers (`src/lib/session.ts`); no password is

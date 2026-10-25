@@ -37,13 +37,6 @@ Live AA integration requires becoming/partnering with a licensed Financial Infor
 ## Later-phase (not in current scope)
 Live AA integration via a sandbox (Setu / Finvu / Anumati), real consent artifact handling, real PII security requirements.
 
-## What I need help with from Gemini
-- Structuring the Spring Boot project (modules/packages for ingestion, normalization, retrieval, RAG query service)
-- Designing mock data generators that faithfully mirror AA FI schemas
-- Implementing the retrieval + computation hybrid for numerical financial questions
-- Wiring up the RAG pipeline (embeddings, vector retrieval, grounded prompt construction, source citation in responses)
-- Docker/CI-CD setup consistent with standard fintech patterns
-
 ## My background (for calibrating suggestions)
 - Comfortable with Java/Spring Boot, Docker, CI/CD (Jenkins, GitLab CI, ArgoCD) from a fintech internship (REST APIs, microservices)
 - Already have a working Financial RAG model from prior client work — this project reuses/extends it rather than building RAG from scratch

@@ -254,31 +254,6 @@ export const knowledgeBase: { category: string; icon: string; items: string[] }[
   },
 ]
 
-export const sessions = [
-  {
-    id: 'ses-1',
-    device: 'MacBook Pro (M3)',
-    icon: 'computer',
-    detail: 'Current session · Bengaluru, IN',
-    current: true,
-  },
-  {
-    id: 'ses-2',
-    device: 'Android · Etherm Finance App',
-    icon: 'smartphone',
-    detail: 'Active 2 hrs ago · Bengaluru, IN',
-    current: false,
-  },
-]
-
-export const profile = {
-  name: 'Ananya Rao',
-  tier: 'AA Verified',
-  /** AA Virtual ID — the handle used to raise consent requests. */
-  vua: 'ananya@onemoney',
-  customerId: 'OFA-X902-884V',
-}
-
 /**
  * FIPs discoverable through the AA when linking a new account. Same shape as the
  * accounts above; the connect flow turns a pick from here into a FipAccount.
