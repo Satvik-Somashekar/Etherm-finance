@@ -156,6 +156,19 @@ Sign-in is a demo picker for the five synthetic customers (`src/lib/session.ts`)
 checked and the services still accept any customer id, so this is not access control yet. Each
 user's session reloads their own accounts, Dashboard and Oracle data.
 
+### Demo mode (no backend)
+
+`npm --prefix frontend run build:demo` builds a static site that serves recorded responses instead of
+calling the services, so it can be hosted anywhere (`frontend/vercel.json` has the Vercel settings).
+The recordings in `frontend/public/demo/` were captured from the real services by
+`npm --prefix frontend run record-demo` (services up, `ETHERM_AS_OF=2026-10-25`): accounts,
+providers, the Dashboard overview, and answers to the 18 questions in `frontend/src/demo/questions.json`
+for each of the five customers. Nothing is computed in the browser.
+
+Limits: only those 18 questions are answered; other questions get a message saying so. Revoking a
+consent works in the session (the account disappears and Oracle answers stop until it is linked
+again) but the Dashboard history is not recomputed, and a reload resets everything.
+
 Privacy Mode (on `/consent`) masks every monetary figure in the app through
 `src/state/PrivacyContext.tsx`. New money values should render through `<Money />` to keep that
 behaviour.

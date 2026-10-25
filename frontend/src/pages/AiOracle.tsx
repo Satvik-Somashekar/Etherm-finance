@@ -4,6 +4,7 @@ import { Money } from '../components/Money'
 import { knowledgeBase, premiumBreakdown, premiumTotals } from '../data/mock'
 import { formatCompact } from '../lib/format'
 import { ask, type QueryResult } from '../lib/api'
+import { DEMO, DEMO_QUESTIONS } from '../lib/demo'
 import { useAccounts } from '../state/AccountsContext'
 import { GroundedAnswer } from '../components/GroundedAnswer'
 
@@ -17,7 +18,7 @@ interface ChatMessage {
   result?: QueryResult
 }
 
-const EXAMPLES = [
+const EXAMPLES = DEMO ? DEMO_QUESTIONS : [
   'Did my insurance premiums increase last quarter compared to the one before?',
   'How much did I spend on groceries last quarter?',
   'What is my net worth?',

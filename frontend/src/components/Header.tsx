@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom'
 import { Icon } from './Icon'
 import { Logo } from './Logo'
 import { useAuth } from '../state/AuthContext'
+import { DEMO } from '../lib/demo'
 
 const NAV = [
   { to: '/', label: 'Dashboard', end: true },
@@ -24,6 +25,14 @@ export function Header() {
         <div className="flex items-center gap-3">
           <Logo />
           <span className="text-headline-sm tracking-tight text-on-surface">Etherm Finance</span>
+          {DEMO && (
+            <span
+              title="Recorded responses from the real services; no backend is running"
+              className="rounded-full border border-primary/30 px-2 py-0.5 text-label-sm text-primary"
+            >
+              Demo mode
+            </span>
+          )}
         </div>
 
         <nav className="hidden items-center gap-10 lg:flex">

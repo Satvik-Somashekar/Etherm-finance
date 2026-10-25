@@ -2,6 +2,7 @@ import { GlassCard } from '../components/GlassCard'
 import { Logo } from '../components/Logo'
 import { DEMO_USERS } from '../lib/session'
 import { useAuth } from '../state/AuthContext'
+import { DEMO } from '../lib/demo'
 
 export function Login() {
   const { login } = useAuth()
@@ -42,6 +43,7 @@ export function Login() {
           </ul>
           <p className="mt-6 text-label-sm text-on-surface-variant opacity-70">
             Demo sign-in: no password is checked yet.
+            {DEMO && ' This is demo mode: the data and answers were recorded from the real services.'}
           </p>
         </GlassCard>
       </div>
