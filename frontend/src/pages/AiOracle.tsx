@@ -3,13 +3,31 @@ import { Icon } from '../components/Icon'
 import { Money } from '../components/Money'
 import { knowledgeBase, premiumBreakdown, premiumTotals } from '../data/mock'
 import { formatCompact } from '../lib/format'
+import { ask, type QueryResult } from '../lib/api'
+import { useAccounts } from '../state/AccountsContext'
+import { GroundedAnswer } from '../components/GroundedAnswer'
 
 interface ChatMessage {
   id: string
   role: 'user' | 'oracle'
   text: string
-  /** Only the seeded answer carries the rich grounded-result block. */
+  /** Only the seeded mock answer carries the static grounded-result block. */
   grounded?: boolean
+  /** A live answer from rag-service, with its Java-computed figures and citations. */
+  result?: QueryResult
+}
+
+const EXAMPLES = [
+  'Did my insurance premiums increase last quarter compared to the one before?',
+  'How much did I spend on groceries last quarter?',
+  'What is my net worth?',
+  'Show my 3 biggest expenses last month',
+]
+
+const INTRO: ChatMessage = {
+  id: 'intro',
+  role: 'oracle',
+  text: 'Ask about your spending, salary, premiums, investments, EPF or balances. Every figure is computed from your consented records, and each answer lists the records it used.',
 }
 
 const SEEDED: ChatMessage[] = [
@@ -33,7 +51,11 @@ const SEEDED: ChatMessage[] = [
 const BAR_COLOUR = ['bg-primary', 'bg-tertiary', 'bg-secondary', 'bg-primary-container']
 
 export function AiOracle() {
-  const [messages, setMessages] = useState<ChatMessage[]>(SEEDED)
+  const { source } = useAccounts()
+  const [stored, setMessages] = useState<ChatMessage[]>(SEEDED)
+  // With the backend running, the static mock exchange makes way for live answers.
+  const fromLive = (list: ChatMessage[]) => (source === 'live' && list === SEEDED ? [INTRO] : list)
+  const messages = fromLive(stored)
   const [draft, setDraft] = useState('')
   const [thinking, setThinking] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -42,27 +64,48 @@ export function AiOracle() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
   }, [messages, thinking])
 
-  function handleSubmit(event: FormEvent) {
-    event.preventDefault()
-    const question = draft.trim()
+  function send(question: string) {
     if (!question || thinking) return
 
-    setMessages((prev) => [...prev, { id: `u-${Date.now()}`, role: 'user', text: question }])
+    setMessages((prev) => [...fromLive(prev), { id: `u-${Date.now()}`, role: 'user', text: question }])
     setDraft('')
     setThinking(true)
 
-    // Placeholder until rag-service exposes POST /query. See README for the contract.
-    window.setTimeout(() => {
-      setThinking(false)
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `o-${Date.now()}`,
-          role: 'oracle',
-          text: 'Not connected yet — this UI is running on mock AA data. Once rag-service exposes its query endpoint, this answer will be retrieved from your normalized records and computed in code, with the source records cited below it.',
-        },
-      ])
-    }, 1100)
+    if (source !== 'live') {
+      // Backend not running: say so rather than invent an answer.
+      window.setTimeout(() => {
+        setThinking(false)
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `o-${Date.now()}`,
+            role: 'oracle',
+            text: 'The Etherm services are not running, so this screen is showing mock data. Start the backend (see README) to get answers computed from your consented records.',
+          },
+        ])
+      }, 600)
+      return
+    }
+
+    ask(question)
+      .then((result) =>
+        setMessages((prev) => [
+          ...prev,
+          { id: `o-${Date.now()}`, role: 'oracle', text: result.answer, result },
+        ]),
+      )
+      .catch((e: Error) =>
+        setMessages((prev) => [
+          ...prev,
+          { id: `o-${Date.now()}`, role: 'oracle', text: `I could not answer that: ${e.message}` },
+        ]),
+      )
+      .finally(() => setThinking(false))
+  }
+
+  function handleSubmit(event: FormEvent) {
+    event.preventDefault()
+    send(draft.trim())
   }
 
   const share = (amount: number) => (amount / premiumTotals.currentQuarter) * 100
@@ -130,14 +173,13 @@ export function AiOracle() {
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-on-primary">
                 <Icon name="auto_awesome" size={18} />
               </div>
-              <span className="text-label-md text-on-surface">Index Status</span>
-            </div>
-            <div className="mt-2 h-1 w-full rounded-full bg-surface-container-highest">
-              <div className="h-1 w-3/4 animate-pulse rounded-full bg-primary" />
+              <span className="text-label-md text-on-surface">Retrieval</span>
             </div>
             <div className="mt-2 flex justify-between text-label-sm text-on-surface-variant">
-              <span>Embeddings</span>
-              <span className="text-primary">Synchronised</span>
+              <span>Structured filters</span>
+              <span className={source === 'live' ? 'text-primary' : 'text-on-surface-variant'}>
+                {source === 'live' ? 'Connected' : 'Offline'}
+              </span>
             </div>
           </div>
         </div>
@@ -156,7 +198,9 @@ export function AiOracle() {
               Oracle Session
             </h1>
             <p className="mt-1 truncate text-label-md text-on-surface-variant opacity-70">
-              Scope: Insurance Policies · 4 consented records
+              {source === 'live'
+                ? 'Scope: all accounts under your active consents'
+                : 'Scope: Insurance Policies · 4 consented records (mock)'}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -199,6 +243,23 @@ export function AiOracle() {
                   </div>
                   <div className="space-y-6 rounded-lg rounded-tl-sm bg-surface-container p-5 shadow-lg backdrop-blur-xl lg:p-6">
                     <p className="text-body-lg text-on-surface">{message.text}</p>
+
+                    {message.result && <GroundedAnswer result={message.result} />}
+
+                    {message.id === 'intro' && (
+                      <div className="flex flex-wrap gap-2">
+                        {EXAMPLES.map((example) => (
+                          <button
+                            key={example}
+                            type="button"
+                            onClick={() => send(example)}
+                            className="rounded-full bg-surface-container-highest px-3 py-1.5 text-left text-label-md text-on-surface-variant transition-colors hover:text-on-surface"
+                          >
+                            {example}
+                          </button>
+                        ))}
+                      </div>
+                    )}
 
                     {message.grounded && (
                       <>

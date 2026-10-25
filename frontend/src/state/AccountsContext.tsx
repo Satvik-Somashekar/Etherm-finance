@@ -16,6 +16,7 @@ import {
 } from '../data/mock'
 import type { ConsentArtifact, FipAccount, FiType } from '../types/fi'
 import { loadAccounts, saveAccounts } from '../lib/accountsStore'
+import { discoverProviders, linkProvider, loadLinkedAccounts, revokeConsent } from '../lib/api'
 
 /** How long a freshly approved consent spends "syncing" before data lands. */
 const SYNC_MS = 1800
@@ -46,7 +47,16 @@ export interface LinkRequest {
   consent: ConsentArtifact
 }
 
+/**
+ * Where account data comes from: the Java services when they answer, otherwise the bundled mock
+ * data so the UI still runs on its own.
+ */
+export type DataSource = 'loading' | 'live' | 'mock'
+
 interface AccountsValue {
+  source: DataSource
+  /** Set when a live call failed; cleared by the next successful one. */
+  error: string | null
   accounts: FipAccount[]
   /** Ids currently mid-fetch; their balances are not meaningful yet. */
   syncingIds: string[]
@@ -63,11 +73,34 @@ const AccountsContext = createContext<AccountsValue | null>(null)
 export function AccountsProvider({ children }: { children: ReactNode }) {
   const [accounts, setAccounts] = useState<FipAccount[]>(loadAccounts)
   const [syncingIds, setSyncingIds] = useState<string[]>([])
+  const [source, setSource] = useState<DataSource>('loading')
+  const [error, setError] = useState<string | null>(null)
+  const [liveCandidates, setLiveCandidates] = useState<FipCandidate[]>([])
+
+  const refreshLive = useCallback(async () => {
+    const [linked, discovered] = await Promise.all([loadLinkedAccounts(), discoverProviders()])
+    setAccounts(linked)
+    setLiveCandidates(discovered)
+    setError(null)
+  }, [])
+
+  // Prefer the backend; fall back to the mock data if it is not running.
+  useEffect(() => {
+    let cancelled = false
+    refreshLive()
+      .then(() => !cancelled && setSource('live'))
+      .catch(() => !cancelled && setSource('mock'))
+    return () => {
+      cancelled = true
+    }
+  }, [refreshLive])
 
   const timers = useRef<number[]>([])
   useEffect(() => () => timers.current.forEach(window.clearTimeout), [])
 
-  useEffect(() => saveAccounts(accounts), [accounts])
+  useEffect(() => {
+    if (source === 'mock') saveAccounts(accounts)
+  }, [accounts, source])
 
   /** Lands the first fetch for an account after SYNC_MS. Returns its timer id. */
   const finishSync = useCallback((id: string, fiType: FiType): number => {
@@ -108,6 +141,19 @@ export function AccountsProvider({ children }: { children: ReactNode }) {
    */
   const link = useCallback(
     (request: LinkRequest) => {
+      if (source === 'live') {
+        const fipId = request.candidate?.fipId ?? accounts.find((a) => a.id === request.accountId)?.fipId
+        if (!fipId) return
+        const fiTypes = [
+          ...new Set(liveCandidates.filter((c) => c.fipId === fipId).map((c) => c.fiType)),
+        ]
+        setSyncingIds((current) => [...current, fipId])
+        linkProvider(fipId, fiTypes)
+          .then(refreshLive)
+          .catch((e: Error) => setError(e.message))
+          .finally(() => setSyncingIds((current) => current.filter((v) => v !== fipId)))
+        return
+      }
       const existing = request.accountId
       const candidate = request.candidate
       const id = existing ?? `acc-${candidate!.fipId.toLowerCase()}-${Date.now()}`
@@ -142,14 +188,22 @@ export function AccountsProvider({ children }: { children: ReactNode }) {
       setSyncingIds((current) => [...current, id])
       if (fiType) timers.current.push(finishSync(id, fiType))
     },
-    [finishSync],
+    [finishSync, source, accounts, liveCandidates, refreshLive],
   )
 
   /** Revokes consent and unlinks. Totals fall automatically — they are derived. */
   const remove = useCallback((id: string) => {
+    if (source === 'live') {
+      const consentId = accounts.find((a) => a.id === id)?.consent.consentId
+      if (!consentId) return
+      revokeConsent(consentId)
+        .then(refreshLive)
+        .catch((e: Error) => setError(e.message))
+      return
+    }
     setAccounts((current) => current.filter((account) => account.id !== id))
     setSyncingIds((current) => current.filter((value) => value !== id))
-  }, [])
+  }, [source, accounts, refreshLive])
 
   const netWorth = useMemo(
     () =>
@@ -161,12 +215,17 @@ export function AccountsProvider({ children }: { children: ReactNode }) {
 
   const availableFips = useMemo(() => {
     const linked = accounts.map((account) => account.fipId)
-    return allCandidates.filter((candidate) => !linked.includes(candidate.fipId))
-  }, [accounts])
+    const pool = source === 'live' ? liveCandidates : allCandidates
+    return pool.filter(
+      (candidate, index, list) =>
+        !linked.includes(candidate.fipId) &&
+        list.findIndex((c) => c.fipId === candidate.fipId) === index,
+    )
+  }, [accounts, source, liveCandidates])
 
   const value = useMemo(
-    () => ({ accounts, syncingIds, netWorth, availableFips, link, remove }),
-    [accounts, syncingIds, netWorth, availableFips, link, remove],
+    () => ({ source, error, accounts, syncingIds, netWorth, availableFips, link, remove }),
+    [source, error, accounts, syncingIds, netWorth, availableFips, link, remove],
   )
 
   return <AccountsContext.Provider value={value}>{children}</AccountsContext.Provider>
