@@ -10,3 +10,8 @@ management:
     web:
       exposure:
         include: health,info
+
+etherm:
+  services:
+    ingestion: ${ETHERM_INGESTION_URL:http://localhost:8081}
+    normalization: ${ETHERM_NORMALIZATION_URL:http://localhost:8082}
