@@ -1,4 +1,4 @@
-package com.openfinance.ingestion;
+package com.openfinance.core.model;
 
 import java.util.Arrays;
 import java.util.Optional;

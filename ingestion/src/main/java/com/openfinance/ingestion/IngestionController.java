@@ -1,5 +1,7 @@
 package com.openfinance.ingestion;
 
+import com.openfinance.core.model.FiType;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
