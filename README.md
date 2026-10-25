@@ -149,6 +149,10 @@ answered as an income question) is left in to show what the keyword parser still
 | `/consent` | Consent & Security | Live consent ledger. The profile and active sessions are mock |
 | `/` | Dashboard | Live: net worth, allocation, a 12-month history rebuilt from transactions at today's prices (market moves are not reflected), recent activity, and three insights answered by the same pipeline as the Oracle (`GET /api/customers/{id}/overview`) |
 
+Sign-in is a demo picker for the five synthetic customers (`src/lib/session.ts`); no password is
+checked and the services still accept any customer id, so this is not access control yet. Each
+user's session reloads their own accounts, Dashboard and Oracle data.
+
 Privacy Mode (on `/consent`) masks every monetary figure in the app through
 `src/state/PrivacyContext.tsx`. New money values should render through `<Money />` to keep that
 behaviour.

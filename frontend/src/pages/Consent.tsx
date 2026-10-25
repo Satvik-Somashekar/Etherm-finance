@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
 import { GlassCard } from '../components/GlassCard'
 import { Icon } from '../components/Icon'
-import { profile, sessions } from '../data/mock'
+import { sessions } from '../data/mock'
 import { FI_TYPE_LABEL } from '../types/fi'
 import { daysUntil, formatDate } from '../lib/format'
 import { usePrivacy } from '../state/PrivacyContext'
 import { useAccounts } from '../state/AccountsContext'
-import { CUSTOMER_ID } from '../lib/api'
+import { useAuth } from '../state/AuthContext'
 
 const PANELS = [
   {
@@ -28,7 +28,7 @@ const PANELS = [
     tone: 'text-tertiary',
     title: 'AA Handle',
     body: 'Your Virtual User Address identifies you to the Account Aggregator. It carries no account numbers and can be rotated.',
-    footer: profile.vua,
+    footer: 'Per-user handle',
   },
   {
     icon: 'receipt_long',
@@ -43,8 +43,10 @@ export function Consent() {
   const { masked, toggle } = usePrivacy()
   const [copied, setCopied] = useState(false)
 
-  const { accounts, source } = useAccounts()
-  const customerId = source === 'live' ? CUSTOMER_ID : profile.customerId
+  const { user } = useAuth()
+  const { accounts } = useAccounts()
+  const customerId = user?.id ?? ''
+  const displayName = user?.name ?? ''
   // One row per consent artefact; a consent can cover several accounts at one provider.
   const activeConsents = useMemo(
     () => [
@@ -81,7 +83,7 @@ export function Consent() {
           <div className="flex items-center gap-6">
             <div className="relative">
               <div className="flex h-24 w-24 items-center justify-center rounded-full border border-primary/20 bg-surface-container-high text-headline-md text-primary">
-                {profile.name
+                {displayName
                   .split(' ')
                   .map((part) => part[0])
                   .join('')}
@@ -91,11 +93,11 @@ export function Consent() {
             <div>
               <div className="mb-2 flex flex-wrap items-center gap-3">
                 <h1 className="text-headline-lg-mobile text-on-background lg:text-headline-lg">
-                  {profile.name}
+                  {displayName}
                 </h1>
                 <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-surface-container-high/80 px-3 py-1 text-primary backdrop-blur-sm">
                   <Icon name="verified" size={16} fill={1} />
-                  <span className="text-label-sm uppercase tracking-widest">{profile.tier}</span>
+                  <span className="text-label-sm uppercase tracking-widest">Demo customer</span>
                 </span>
               </div>
               <p className="flex items-center gap-2 text-body-md text-on-surface-variant">

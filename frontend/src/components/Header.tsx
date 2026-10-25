@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import { Icon } from './Icon'
 import { Logo } from './Logo'
-import { profile } from '../data/mock'
+import { useAuth } from '../state/AuthContext'
 
 const NAV = [
   { to: '/', label: 'Dashboard', end: true },
@@ -16,6 +16,8 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
   }`
 
 export function Header() {
+  const { user, logout } = useAuth()
+  if (!user) return null
   return (
     <header className="fixed top-0 z-50 w-full border-b border-white/5 bg-surface/40 shadow-[0_1px_20px_rgba(0,0,0,0.2)] backdrop-blur-2xl">
       <div className="flex h-20 w-full items-center justify-between px-margin-mobile lg:px-margin-desktop">
@@ -43,15 +45,22 @@ export function Header() {
           </button>
           <div className="flex items-center gap-3 border-l border-outline-variant/30 pl-4">
             <div className="hidden text-right sm:block">
-              <div className="text-label-sm text-on-surface">{profile.name}</div>
-              <div className="text-label-sm text-on-surface-variant opacity-60">{profile.tier}</div>
+              <div className="text-label-sm text-on-surface">{user.name}</div>
+              <div className="text-label-sm text-on-surface-variant opacity-60">Demo customer</div>
             </div>
             <div className="flex h-9 w-9 items-center justify-center rounded-full border border-primary/20 bg-surface-container-high text-label-sm text-primary">
-              {profile.name
+              {user.name
                 .split(' ')
                 .map((part) => part[0])
                 .join('')}
             </div>
+            <button
+              type="button"
+              onClick={logout}
+              className="rounded-full px-3 py-1.5 text-label-sm text-on-surface-variant transition-colors hover:text-on-surface"
+            >
+              Sign out
+            </button>
           </div>
         </div>
       </div>
