@@ -1,15 +1,17 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { GlassCard } from '../components/GlassCard'
 import { Icon } from '../components/Icon'
 import { Money } from '../components/Money'
 import { Sparkline } from '../components/Sparkline'
-import { insights, netWorthSeries, transactions } from '../data/mock'
+import { insights as mockInsights, netWorthSeries, transactions as mockTransactions } from '../data/mock'
 import { useAccounts } from '../state/AccountsContext'
 import { FI_TYPE_ICON, FI_TYPE_LABEL, type FiType } from '../types/fi'
 import { timeAgo } from '../lib/format'
+import { loadOverview, type Overview } from '../lib/api'
 
-const RANGES = { '1M': 2, '3M': 4, '1Y': 12, ALL: netWorthSeries.length } as const
+// Points to show per range, counting the month the range starts from.
+const RANGES = { '1M': 2, '3M': 4, '1Y': 13, ALL: Infinity } as const
 type Range = keyof typeof RANGES
 
 const ALLOCATION_COLOUR: Record<FiType, string> = {
@@ -24,7 +26,26 @@ export function Dashboard() {
   const [range, setRange] = useState<Range>('1Y')
 
   // Same source as the Accounts screen, so the two can never disagree.
-  const { accounts, netWorth } = useAccounts()
+  const { accounts, netWorth, source } = useAccounts()
+
+  // Live mode: history, activity and insights come from the rag-service and are refetched when
+  // the set of consents changes. Mock mode keeps the bundled sample data.
+  const consentKey = accounts.map((a) => `${a.consent.consentId}:${a.consent.status}`).join(',')
+  const [overview, setOverview] = useState<Overview | null>(null)
+  useEffect(() => {
+    if (source !== 'live') return
+    let cancelled = false
+    loadOverview()
+      .then((o) => !cancelled && setOverview(o))
+      .catch(() => !cancelled && setOverview(null))
+    return () => {
+      cancelled = true
+    }
+  }, [source, consentKey])
+  const live = source === 'live' ? overview : null
+  const history = live?.series ?? netWorthSeries
+  const transactions = live?.activity ?? mockTransactions
+  const insights = live?.insights ?? mockInsights
 
   // Linked accounts only — a pending consent grants no access to balances.
   const linked = useMemo(
@@ -32,15 +53,17 @@ export function Dashboard() {
     [accounts],
   )
 
-  // The history is fixed mock data, but its final point is today's real total,
-  // so the chart and the change percentage track linking and unlinking.
+  // Live history ends at today's net worth already. The mock history is fixed sample data, so its
+  // final point is replaced with today's real total to track linking and unlinking.
   const series = useMemo(() => {
-    const window = netWorthSeries.slice(netWorthSeries.length - RANGES[range])
+    const window = history.slice(Math.max(0, history.length - RANGES[range]))
+    if (live || window.length === 0) return window
     return window.map((point, index) =>
       index === window.length - 1 ? { ...point, value: netWorth } : point,
     )
-  }, [range, netWorth])
+  }, [history, live, range, netWorth])
   const changePct = useMemo(() => {
+    if (series.length === 0) return 0
     const first = series[0].value
     if (!first) return 0
     return ((series[series.length - 1].value - first) / first) * 100
@@ -50,6 +73,8 @@ export function Dashboard() {
     if (netWorth === 0) return []
     const byType = new Map<FiType, number>()
     for (const account of linked) {
+      // A policy's sum assured is cover, not an asset, so it has no share of net worth.
+      if (account.fiType === 'INSURANCE_POLICIES') continue
       byType.set(account.fiType, (byType.get(account.fiType) ?? 0) + account.balance)
     }
     return [...byType.entries()]
@@ -97,6 +122,12 @@ export function Dashboard() {
             <p className="mt-4 text-body-md text-on-surface-variant">
               Aggregated across {linked.length} consented accounts · {allocation.length} FI types
             </p>
+            {live && (
+              <p className="mt-1 text-label-sm text-on-surface-variant opacity-70">
+                Change over the selected range. History is rebuilt from your transactions at
+                today's prices, so it shows saving and spending, not market moves.
+              </p>
+            )}
           </div>
 
           <div className="flex gap-2 sm:gap-4">
@@ -180,7 +211,11 @@ export function Dashboard() {
                   <Money
                     value={txn.amount}
                     className={`text-label-md ${
-                      txn.direction === 'CREDIT' ? 'text-success' : 'text-error'
+                      txn.fiType !== 'DEPOSIT'
+                        ? 'text-on-surface'
+                        : txn.direction === 'CREDIT'
+                          ? 'text-success'
+                          : 'text-error'
                     }`}
                   />
                   <p className="mt-1 text-label-sm text-on-surface-variant">
@@ -207,7 +242,9 @@ export function Dashboard() {
                 className="rounded-md border border-on-primary/20 bg-on-primary/10 p-4 backdrop-blur-md"
               >
                 <p className="mb-1 text-body-md text-on-primary">{insight.title}</p>
-                <p className="text-label-sm leading-relaxed text-on-primary/80">{insight.body}</p>
+                {insight.body && (
+                  <p className="text-label-sm leading-relaxed text-on-primary/80">{insight.body}</p>
+                )}
                 <p className="mt-3 flex items-center gap-1 text-label-sm text-on-primary/60">
                   <Icon name="link" size={14} />
                   Grounded in {insight.sources.length} record
