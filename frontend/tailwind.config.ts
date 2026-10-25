@@ -1,0 +1,131 @@
+import type { Config } from 'tailwindcss'
+
+/**
+ * Etherm Lumina — design tokens.
+ *
+ * Mirrors docs/design/DESIGN.md, which is the source of truth. Note that the
+ * borderRadius scale is redefined per the design system (cards 1rem = rounded-lg,
+ * controls 0.5rem = rounded, modals 1.5rem = rounded-xl), so these names do not
+ * carry their stock Tailwind values.
+ */
+export default {
+  content: ['./index.html', './src/**/*.{ts,tsx}'],
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        surface: '#101415',
+        'surface-dim': '#101415',
+        'surface-bright': '#363a3b',
+        'surface-container-lowest': '#0b0f10',
+        'surface-container-low': '#191c1e',
+        'surface-container': '#1d2022',
+        'surface-container-high': '#272a2c',
+        'surface-container-highest': '#323537',
+        'surface-variant': '#323537',
+        'surface-tint': '#d0bcff',
+        'on-surface': '#e0e3e5',
+        'on-surface-variant': '#cbc3d7',
+        'inverse-surface': '#e0e3e5',
+        'inverse-on-surface': '#2d3133',
+        outline: '#958ea0',
+        'outline-variant': '#494454',
+        primary: '#d0bcff',
+        'on-primary': '#3c0091',
+        'primary-container': '#a078ff',
+        'on-primary-container': '#340080',
+        'inverse-primary': '#6d3bd7',
+        'primary-fixed': '#e9ddff',
+        'primary-fixed-dim': '#d0bcff',
+        'on-primary-fixed': '#23005c',
+        'on-primary-fixed-variant': '#5516be',
+        secondary: '#c4c1fb',
+        'on-secondary': '#2d2a5b',
+        'secondary-container': '#444173',
+        'on-secondary-container': '#b3afe9',
+        'secondary-fixed': '#e3dfff',
+        'secondary-fixed-dim': '#c4c1fb',
+        'on-secondary-fixed': '#181445',
+        'on-secondary-fixed-variant': '#444173',
+        tertiary: '#b9c7df',
+        'on-tertiary': '#233144',
+        'tertiary-container': '#8392a8',
+        'on-tertiary-container': '#1c2a3d',
+        'tertiary-fixed': '#d5e3fc',
+        'tertiary-fixed-dim': '#b9c7df',
+        'on-tertiary-fixed': '#0d1c2e',
+        'on-tertiary-fixed-variant': '#3a485b',
+        error: '#ffb4ab',
+        'on-error': '#690005',
+        'error-container': '#93000a',
+        'on-error-container': '#ffdad6',
+        background: '#101415',
+        'on-background': '#e0e3e5',
+        // Not in the M3 token set; used for positive/credit values and LIVE state.
+        success: '#a3defe',
+      },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+        'headline-lg': ['Inter', 'sans-serif'],
+        'headline-lg-mobile': ['Inter', 'sans-serif'],
+        'headline-md': ['Inter', 'sans-serif'],
+        'headline-sm': ['Inter', 'sans-serif'],
+        'body-lg': ['Inter', 'sans-serif'],
+        'body-md': ['Inter', 'sans-serif'],
+        'label-md': ['Inter', 'sans-serif'],
+        'label-sm': ['Inter', 'sans-serif'],
+        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+      },
+      fontSize: {
+        'headline-lg': ['48px', { lineHeight: '1.1', letterSpacing: '-0.02em', fontWeight: '600' }],
+        'headline-lg-mobile': ['32px', { lineHeight: '1.2', letterSpacing: '-0.01em', fontWeight: '600' }],
+        'headline-md': ['32px', { lineHeight: '1.2', letterSpacing: '-0.01em', fontWeight: '500' }],
+        'headline-sm': ['24px', { lineHeight: '1.3', letterSpacing: '0', fontWeight: '500' }],
+        'body-lg': ['18px', { lineHeight: '1.6', letterSpacing: '0', fontWeight: '400' }],
+        'body-md': ['16px', { lineHeight: '1.5', letterSpacing: '0', fontWeight: '400' }],
+        'label-md': ['14px', { lineHeight: '1', letterSpacing: '0.05em', fontWeight: '600' }],
+        'label-sm': ['12px', { lineHeight: '1', letterSpacing: '0', fontWeight: '500' }],
+      },
+      borderRadius: {
+        none: '0',
+        sm: '0.25rem',
+        DEFAULT: '0.5rem',
+        md: '0.75rem',
+        lg: '1rem',
+        xl: '1.5rem',
+        full: '9999px',
+      },
+      spacing: {
+        unit: '8px',
+        gutter: '24px',
+        'margin-mobile': '16px',
+        'margin-desktop': '48px',
+        section: '80px',
+      },
+      maxWidth: {
+        'container-max': '1280px',
+      },
+      backdropBlur: {
+        card: '20px',
+        floating: '40px',
+      },
+      boxShadow: {
+        glow: '0 0 20px rgba(208, 188, 255, 0.3)',
+        'glow-lg': '0 0 40px rgba(208, 188, 255, 0.25)',
+        'glow-sm': '0 0 8px rgba(208, 188, 255, 0.6)',
+      },
+      keyframes: {
+        'fade-up': {
+          '0%': { opacity: '0', transform: 'translateY(12px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        grow: { '0%': { width: '0' } },
+      },
+      animation: {
+        'fade-up': 'fade-up 0.5s ease-out both',
+        grow: 'grow 1s cubic-bezier(0.16, 1, 0.3, 1) both',
+      },
+    },
+  },
+  plugins: [],
+} satisfies Config
