@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:demo": "tsc -b && vite build --mode demo",
+    "record-demo": "node scripts/record-demo.mjs",
     "lint": "oxlint",
     "preview": "vite preview"
   },

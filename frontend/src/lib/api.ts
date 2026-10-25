@@ -1,6 +1,8 @@
 import type { ConsentArtifact, FipAccount, FiType, Insight, Transaction } from '../types/fi'
 import type { FipCandidate } from '../data/mock'
 import { currentCustomerId } from './session'
+import { ApiError } from './errors'
+import { DEMO, demoCall } from './demo'
 
 /**
  * Typed client for the Etherm backend, reached through the Vite proxy (see vite.config.ts).
@@ -19,16 +21,10 @@ const FIP_NAMES: Record<string, string> = {
 
 export const fipName = (fipId: string) => FIP_NAMES[fipId] ?? fipId
 
-export class ApiError extends Error {
-  readonly status: number
-
-  constructor(status: number, message: string) {
-    super(message)
-    this.status = status
-  }
-}
+export { ApiError } from './errors'
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
+  if (DEMO) return demoCall<T>(path, init)
   const response = await fetch(path, {
     ...init,
     headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },

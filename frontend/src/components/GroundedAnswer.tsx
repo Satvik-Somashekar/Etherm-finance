@@ -11,8 +11,11 @@ const MAX_CHIPS = 12
  */
 export function GroundedAnswer({ result }: { result: QueryResult }) {
   const metrics = result.figures.filter((f) => !['employeeShare', 'employerShare'].includes(f.key) || result.intent === 'EPF_CONTRIBUTIONS')
-  const total = result.figures.find((f) => f.key === 'total')?.value ?? 0
+  const reported = result.figures.find((f) => f.key === 'total')?.value ?? 0
   const items = result.breakdown.slice(0, 5)
+  // Without a total (savings rate) the rows are not parts of a whole: scale bars to the largest.
+  const hasTotal = reported > 0
+  const total = hasTotal ? reported : Math.max(0, ...items.map((i) => i.value))
   const share = (value: number) => (total > 0 ? (value / total) * 100 : 0)
   const chips = result.citations.slice(0, MAX_CHIPS)
 
@@ -45,7 +48,8 @@ export function GroundedAnswer({ result }: { result: QueryResult }) {
                 <div className="mb-1 flex justify-between gap-4 text-label-sm text-on-surface">
                   <span className="truncate">{row.label}</span>
                   <span className="shrink-0 text-on-surface-variant">
-                    <Money value={row.value} /> · {share(row.value).toFixed(0)}%
+                    <Money value={row.value} />
+                    {hasTotal && ` · ${share(row.value).toFixed(0)}%`}
                   </span>
                 </div>
                 <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-container-highest">
