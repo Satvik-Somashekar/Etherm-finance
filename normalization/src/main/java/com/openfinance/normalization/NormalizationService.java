@@ -10,6 +10,7 @@ import com.openfinance.core.normalize.NormalizedData;
 import com.openfinance.core.normalize.SourceAccount;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -27,11 +28,14 @@ public class NormalizationService {
     public List<NormalizedData> normalize(String consentId) {
         List<NormalizedData> out = new ArrayList<>();
         for (JsonNode raw : ingestion.fetchedAccounts(consentId)) {
-            out.add(normalizer.normalize(new SourceAccount(raw.path("customerId").asText(), consentId,
-                    raw.path("fipId").asText(), raw.path("linkRefNumber").asText(),
-                    raw.path("maskedAccNumber").asText(), raw.path("account"))));
+            out.add(normalizer.normalize(source(raw, consentId)));
         }
         return out;
+    }
+
+    private static SourceAccount source(JsonNode raw, String consentId) {
+        return new SourceAccount(raw.path("customerId").asText(), consentId, raw.path("fipId").asText(),
+                raw.path("linkRefNumber").asText(), raw.path("maskedAccNumber").asText(), raw.path("account"));
     }
 
     public List<FinancialRecord> records(String consentId) {
@@ -49,13 +53,15 @@ public class NormalizationService {
             if (consent.status() != ConsentStatus.ACTIVE) {
                 continue;
             }
-            for (NormalizedAccount account : accounts(consent.consentId())) {
-                out.add(new AccountView(account, consent));
+            for (JsonNode raw : ingestion.fetchedAccounts(consent.consentId())) {
+                NormalizedData data = normalizer.normalize(source(raw, consent.consentId()));
+                out.add(new AccountView(data.account(), consent, Instant.parse(raw.path("ingestedAt").asText())));
             }
         }
         return out;
     }
 
-    public record AccountView(NormalizedAccount account, ConsentArtifact consent) {
+    /** @param fetchedAt when the FI fetch under this consent last ran */
+    public record AccountView(NormalizedAccount account, ConsentArtifact consent, Instant fetchedAt) {
     }
 }
