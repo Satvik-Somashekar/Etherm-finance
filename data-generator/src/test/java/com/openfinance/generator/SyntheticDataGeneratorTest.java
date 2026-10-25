@@ -76,6 +76,78 @@ class SyntheticDataGeneratorTest {
     }
 
     @Test
+    void depositBalanceNeverGoesNegative() {
+        for (int user = 0; user < 10; user++) {
+            for (JsonNode t : accountOfType(generator.generate(user), "deposit").at("/transactions/transaction")) {
+                assertThat(new BigDecimal(t.get("currentBalance").asText()).signum())
+                        .as("user %d, %s", user, t.get("transactionTimestamp").asText()).isGreaterThanOrEqualTo(0);
+            }
+        }
+    }
+
+    /** The bank account books every share purchase and sale, so net worth does not appear from nowhere. */
+    @Test
+    void shareTradesAreMirroredInTheBankAccount() {
+        for (int user = 0; user < 5; user++) {
+            ObjectNode response = generator.generate(user);
+            BigDecimal buys = BigDecimal.ZERO;
+            BigDecimal sells = BigDecimal.ZERO;
+            for (JsonNode t : accountOfType(response, "equities").at("/transactions/transaction")) {
+                BigDecimal value = new BigDecimal(t.get("tradeValue").asText());
+                if ("BUY".equals(t.get("type").asText())) {
+                    buys = buys.add(value);
+                } else {
+                    sells = sells.add(value);
+                }
+            }
+            BigDecimal debited = BigDecimal.ZERO;
+            BigDecimal credited = BigDecimal.ZERO;
+            for (JsonNode t : accountOfType(response, "deposit").at("/transactions/transaction")) {
+                if (t.get("narration").asText().startsWith("NEFT/DEMAT/")) {
+                    BigDecimal amount = new BigDecimal(t.get("amount").asText());
+                    if ("DEBIT".equals(t.get("type").asText())) {
+                        debited = debited.add(amount);
+                    } else {
+                        credited = credited.add(amount);
+                    }
+                }
+            }
+            assertThat(debited).as("user %d buys", user).isEqualByComparingTo(buys);
+            assertThat(credited).as("user %d sells", user).isEqualByComparingTo(sells);
+        }
+    }
+
+    @Test
+    void holdingsAndTradesUseRealPublicPrices() {
+        PriceBook prices = PriceBook.load();
+        // Infosys closed at 1,445.80 on 1 Oct 2025 (NSE bhavcopy); Axis Midcap NAV is from the AMFI report.
+        assertThat(prices.close("INFY", LocalDate.of(2025, 10, 1))).isEqualByComparingTo("1445.80");
+        assertThat(prices.nav("INF846K01EH3", LocalDate.of(2025, 10, 1)).signum()).isPositive();
+        for (JsonNode acc : accounts(generator.generate(0))) {
+            if ("equities".equals(acc.get("type").asText())) {
+                for (JsonNode t : acc.at("/transactions/transaction")) {
+                    LocalDate day = LocalDate.parse(t.get("transactionDateTime").asText().substring(0, 10));
+                    String symbol = prices.stocks().stream().filter(st -> st.isin().equals(t.get("isin").asText()))
+                            .findFirst().orElseThrow().symbol();
+                    assertThat(new BigDecimal(t.get("rate").asText())).isEqualByComparingTo(prices.close(symbol, day));
+                    assertThat(day.getDayOfWeek().getValue()).as("trades happen on weekdays").isLessThan(6);
+                }
+            }
+        }
+    }
+
+    @Test
+    void pricesAreInterpolatedBetweenRealPoints() {
+        PriceBook prices = PriceBook.load();
+        BigDecimal a = prices.close("INFY", LocalDate.of(2025, 10, 1));
+        BigDecimal b = prices.close("INFY", LocalDate.of(2025, 11, 3));
+        BigDecimal mid = prices.close("INFY", LocalDate.of(2025, 10, 17));
+        assertThat(mid).isBetween(a.min(b), a.max(b));
+        // Outside the loaded span the nearest real price is used.
+        assertThat(prices.close("INFY", LocalDate.of(2020, 1, 1))).isEqualByComparingTo(a);
+    }
+
+    @Test
     void transactionsStayInsideTheRequestedWindow() {
         for (JsonNode acc : accounts(generator.generate(3))) {
             for (JsonNode t : acc.at("/transactions/transaction")) {

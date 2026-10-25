@@ -35,31 +35,30 @@ public class SyntheticDataGenerator {
     private static final String[] FIRST = {"Aarav", "Diya", "Ishaan", "Meera", "Kabir", "Ananya", "Rohan", "Saanvi", "Vihaan", "Tara"};
     private static final String[] LAST = {"Rao", "Iyer", "Sharma", "Menon", "Patel", "Gupta", "Reddy", "Nair", "Joshi", "Das"};
     private static final String[] EMPLOYERS = {"Northwind Systems Pvt Ltd", "Lakeview Analytics LLP", "Bluecrest Technologies Ltd", "Saffron Retail Pvt Ltd"};
-    private static final String[][] SPEND = {
-            {"groceries", "UPI/FRESHMART/groceries", "300", "3500"},
-            {"food", "UPI/QUICKBITE/food order", "150", "1200"},
-            {"fuel", "UPI/CITYFUELS/fuel", "500", "3000"},
-            {"shopping", "UPI/URBANCART/shopping", "400", "6000"},
-            {"utilities", "UPI/POWERGRID/electricity bill", "800", "2800"},
-            {"transport", "UPI/METRORIDE/travel", "60", "600"},
+    /**
+     * How the monthly spending budget is split, from the MoSPI Household Consumption Expenditure
+     * Survey 2023-24, Statement 4, urban India (share of average monthly per-capita spending).
+     * Food (groceries) is cereals, pulses, sugar and salt, milk, vegetables, fruits, egg/fish/meat,
+     * edible oil and spices. Dining is beverages, refreshments and processed food, which includes
+     * cooked meals. Utilities is "fuel and light". Transport is "conveyance", split evenly between
+     * vehicle fuel and fares. Shopping is clothing and footwear, durables and miscellaneous goods.
+     * Rent is modelled separately per persona, and education, medical and services are left out.
+     */
+    private record SpendLine(String key, String narration, double hcesShare, int minTxns, int maxTxns) {
+    }
+
+    private static final SpendLine[] SPEND = {
+            new SpendLine("groceries", "UPI/FRESHMART/groceries", 28.59, 4, 6),
+            new SpendLine("food", "UPI/QUICKBITE/food order", 11.09, 4, 7),
+            new SpendLine("utilities", "UPI/POWERGRID/electricity bill", 5.59, 1, 1),
+            new SpendLine("fuel", "UPI/CITYFUELS/fuel", 4.23, 1, 3),
+            new SpendLine("transport", "UPI/METRORIDE/travel", 4.23, 4, 8),
+            new SpendLine("shopping", "UPI/URBANCART/shopping", 19.45, 1, 3),
     };
-    private static final String[][] MF_SCHEMES = {
-            // amc, scheme name, isin, amfiCode, category, start nav
-            {"Kestrel Mutual Fund", "Kestrel Flexi Cap Fund - Direct Growth", "INF000K01010", "120001", "EQUITY", "52.40"},
-            {"Kestrel Mutual Fund", "Kestrel Liquid Fund - Direct Growth", "INF000K01028", "120002", "DEBT", "2410.15"},
-            {"Harbour Mutual Fund", "Harbour Nifty 50 Index Fund - Direct Growth", "INF000H01015", "130001", "EQUITY", "18.92"},
-            {"Harbour Mutual Fund", "Harbour Midcap Opportunities - Direct Growth", "INF000H01023", "130002", "EQUITY", "96.75"},
-    };
-    private static final String[][] STOCKS = {
-            // issuer, isin, start price
-            {"Infosys Ltd", "INE009A01021", "1520.00"},
-            {"Tata Consultancy Services Ltd", "INE467B01029", "3910.00"},
-            {"HDFC Bank Ltd", "INE040A01034", "1685.00"},
-            {"Reliance Industries Ltd", "INE002A01018", "2890.00"},
-            {"ITC Ltd", "INE154A01025", "455.00"},
-    };
+    private static final double SPEND_SHARE_TOTAL = java.util.Arrays.stream(SPEND).mapToDouble(SpendLine::hcesShare).sum();
 
     private final ObjectMapper mapper = new ObjectMapper();
+    private final PriceBook prices = PriceBook.load();
     private final long seed;
     private final LocalDate from;
     private final LocalDate to;
@@ -97,11 +96,14 @@ public class SyntheticDataGenerator {
         Persona p = persona(index);
         Random rng = rngFor(index, "envelope");
 
-        List<Debit> autoDebits = new ArrayList<>();
+        List<Movement> autoDebits = new ArrayList<>();
         ArrayNode fi = mapper.createArrayNode();
 
+        // Everything that moves money in or out of the bank account is generated first, so the
+        // deposit account can book it.
         ObjectNode mf = mutualFunds(p, index, autoDebits);
         List<ObjectNode> policies = insurancePolicies(p, index, autoDebits);
+        ObjectNode equities = equities(p, index, autoDebits);
         ObjectNode deposit = deposit(p, index, autoDebits);
 
         fi.add(fipEntry("ETHERM-BANK-FIP", deposit));
@@ -112,7 +114,7 @@ public class SyntheticDataGenerator {
         }
         fi.add(insurer);
         fi.add(fipEntry("ETHERM-EPFO-FIP", epf(p, index)));
-        fi.add(fipEntry("ETHERM-DEPOSITORY-FIP", equities(p, index)));
+        fi.add(fipEntry("ETHERM-DEPOSITORY-FIP", equities));
 
         ObjectNode root = mapper.createObjectNode();
         root.put("ver", SCHEMA_VERSION);
@@ -126,7 +128,7 @@ public class SyntheticDataGenerator {
 
     // ---------------------------------------------------------------- deposit
 
-    private ObjectNode deposit(Persona p, int index, List<Debit> autoDebits) {
+    private ObjectNode deposit(Persona p, int index, List<Movement> autoDebits) {
         Random rng = rngFor(index, "deposit");
         List<Txn> txns = new ArrayList<>();
 
@@ -135,12 +137,16 @@ public class SyntheticDataGenerator {
                     "NEFT/SALARY/" + p.employer().toUpperCase()));
             addIfInRange(txns, new Txn(m.atDay(5).atTime(10, 2), "DEBIT", "UPI", p.monthlyRent(),
                     "UPI/RENT/landlord"));
-            int spends = 8 + rng.nextInt(8);
-            for (int s = 0; s < spends; s++) {
-                String[] cat = SPEND[rng.nextInt(SPEND.length)];
-                BigDecimal amt = between(rng, new BigDecimal(cat[2]), new BigDecimal(cat[3]));
-                LocalDateTime at = m.atDay(1 + rng.nextInt(m.lengthOfMonth())).atTime(8 + rng.nextInt(14), rng.nextInt(60));
-                addIfInRange(txns, new Txn(at, "DEBIT", "UPI", amt, cat[1]));
+            // The month's non-rent budget is a share of salary, split across categories in HCES
+            // proportions, then spread over a handful of payments in each category.
+            double budget = p.monthlySalary().doubleValue() * (0.30 + 0.10 * rng.nextDouble()) * (0.85 + 0.30 * rng.nextDouble());
+            for (SpendLine line : SPEND) {
+                double categoryTotal = budget * line.hcesShare() / SPEND_SHARE_TOTAL;
+                int count = line.minTxns() + rng.nextInt(line.maxTxns() - line.minTxns() + 1);
+                for (BigDecimal amt : split(rng, categoryTotal, count)) {
+                    LocalDateTime at = m.atDay(1 + rng.nextInt(m.lengthOfMonth())).atTime(8 + rng.nextInt(14), rng.nextInt(60));
+                    addIfInRange(txns, new Txn(at, "DEBIT", "UPI", amt, line.narration()));
+                }
             }
             if (rng.nextBoolean()) {
                 LocalDateTime at = m.atDay(1 + rng.nextInt(m.lengthOfMonth())).atTime(18, 30);
@@ -152,8 +158,8 @@ public class SyntheticDataGenerator {
                         between(rng, new BigDecimal("400"), new BigDecimal("1800")), "INT.PD/SAVINGS INTEREST"));
             }
         }
-        for (Debit d : autoDebits) {
-            addIfInRange(txns, new Txn(d.at(), "DEBIT", "OTHERS", d.amount(), d.narration()));
+        for (Movement d : autoDebits) {
+            addIfInRange(txns, new Txn(d.at(), d.type(), "OTHERS", d.amount(), d.narration()));
         }
         txns.sort(Comparator.comparing(Txn::at));
 
@@ -195,9 +201,10 @@ public class SyntheticDataGenerator {
 
     // ----------------------------------------------------------- mutual funds
 
-    private ObjectNode mutualFunds(Persona p, int index, List<Debit> autoDebits) {
+    private ObjectNode mutualFunds(Persona p, int index, List<Movement> autoDebits) {
         Random rng = rngFor(index, "mf");
-        String[][] schemes = {MF_SCHEMES[index % MF_SCHEMES.length], MF_SCHEMES[(index + 2) % MF_SCHEMES.length]};
+        List<PriceBook.Fund> all = prices.funds();
+        List<PriceBook.Fund> held = List.of(all.get(index % all.size()), all.get((index + 2) % all.size()));
         String folio = String.format("%08d/%02d", rng.nextInt(100_000_000), 10 + rng.nextInt(80));
 
         ArrayNode txnArray = mapper.createArrayNode();
@@ -206,51 +213,53 @@ public class SyntheticDataGenerator {
         BigDecimal totalValue = BigDecimal.ZERO;
         int n = 0;
 
-        for (String[] s : schemes) {
-            BigDecimal sip = BigDecimal.valueOf(1000L * (2 + rng.nextInt(9))).setScale(2);
-            BigDecimal nav = new BigDecimal(s[5]);
+        for (PriceBook.Fund fund : held) {
+            BigDecimal sip = BigDecimal.valueOf(1000L * (2 + rng.nextInt(5))).setScale(2);
             BigDecimal units = BigDecimal.ZERO;
             BigDecimal cost = BigDecimal.ZERO;
             for (YearMonth m = YearMonth.from(from); !m.isAfter(YearMonth.from(to)); m = m.plusMonths(1)) {
-                nav = drift(rng, nav, "DEBT".equals(s[4]) ? 0.006 : 0.045, 4);
                 LocalDate date = m.atDay(10);
                 if (date.isBefore(from) || date.isAfter(to)) {
                     continue;
                 }
+                BigDecimal nav = prices.nav(fund.isin(), date);
                 BigDecimal bought = sip.divide(nav, 3, RoundingMode.HALF_DOWN);
                 units = units.add(bought);
                 cost = cost.add(sip);
-                txnArray.add(mfTxn(index, ++n, s, folio, "BUY", sip, nav, bought, date, "SIP"));
-                autoDebits.add(new Debit(date.atTime(6, 0), sip, "ACH/SIP/" + s[0].toUpperCase()));
+                txnArray.add(mfTxn(index, ++n, fund, folio, "BUY", sip, nav, bought, date, "SIP"));
+                autoDebits.add(Movement.debit(date.atTime(6, 0), sip, "ACH/SIP/" + fund.amc().toUpperCase()));
             }
             if (rng.nextInt(3) == 0 && units.signum() > 0) {
                 LocalDate date = to.minusDays(20 + rng.nextInt(60));
+                BigDecimal nav = prices.nav(fund.isin(), date);
                 BigDecimal sold = units.multiply(new BigDecimal("0.20")).setScale(3, RoundingMode.DOWN);
                 BigDecimal proceeds = sold.multiply(nav).setScale(2, RoundingMode.HALF_UP);
                 cost = cost.multiply(BigDecimal.ONE.subtract(sold.divide(units, 6, RoundingMode.HALF_UP))).setScale(2, RoundingMode.HALF_UP);
                 units = units.subtract(sold);
-                txnArray.add(mfTxn(index, ++n, s, folio, "SELL", proceeds, nav, sold, date, "REDEMPTION"));
+                txnArray.add(mfTxn(index, ++n, fund, folio, "SELL", proceeds, nav, sold, date, "REDEMPTION"));
             }
-            BigDecimal value = units.multiply(nav).setScale(2, RoundingMode.HALF_UP);
+            BigDecimal closingNav = prices.nav(fund.isin(), to);
+            BigDecimal value = units.multiply(closingNav).setScale(2, RoundingMode.HALF_UP);
             totalCost = totalCost.add(cost);
             totalValue = totalValue.add(value);
 
+            String type = schemeType(fund.category());
             ObjectNode h = holdings.addObject();
-            h.put("amc", s[0]);
+            h.put("amc", fund.amc());
             h.put("registrar", "ETHERM-RTA");
-            h.put("schemeCode", s[3]);
+            h.put("schemeCode", fund.amfiCode());
             h.put("schemeOption", "GROWTH");
-            h.put("schemeTypes", s[4]);
-            h.put("schemeCategory", s[4]);
-            h.put("isin", s[2]);
-            h.put("isinDescription", s[1]);
-            h.put("amfiCode", s[3]);
+            h.put("schemeTypes", type);
+            h.put("schemeCategory", type);
+            h.put("isin", fund.isin());
+            h.put("isinDescription", fund.scheme());
+            h.put("amfiCode", fund.amfiCode());
             h.put("folioNo", folio);
             h.put("FatcaStatus", "YES");
             h.put("closingUnits", units.setScale(3, RoundingMode.HALF_UP).toPlainString());
             h.put("lienUnits", "0");
             h.put("lockinUnits", "0");
-            h.put("nav", nav.toPlainString());
+            h.put("nav", closingNav.toPlainString());
             h.put("navDate", to.toString());
         }
 
@@ -263,16 +272,25 @@ public class SyntheticDataGenerator {
         return account;
     }
 
-    private ObjectNode mfTxn(int index, int n, String[] s, String folio, String type, BigDecimal amount,
+    /** The coarse scheme type the FI schema carries, from AMFI's category text. */
+    private static String schemeType(String amfiCategory) {
+        String c = amfiCategory.toLowerCase();
+        if (c.contains("debt") || c.contains("liquid")) {
+            return "DEBT";
+        }
+        return c.contains("hybrid") || c.contains("balanced") ? "HYBRID" : "EQUITY";
+    }
+
+    private ObjectNode mfTxn(int index, int n, PriceBook.Fund fund, String folio, String type, BigDecimal amount,
                              BigDecimal nav, BigDecimal units, LocalDate date, String narration) {
         ObjectNode t = mapper.createObjectNode();
         t.put("txnId", String.format("M%02d%06d", index + 1, n));
-        t.put("amc", s[0]);
+        t.put("amc", fund.amc());
         t.put("registrar", "ETHERM-RTA");
-        t.put("schemeCode", s[3]);
+        t.put("schemeCode", fund.amfiCode());
         t.put("schemePlan", "DIRECT");
-        t.put("isin", s[2]);
-        t.put("amfiCode", s[3]);
+        t.put("isin", fund.isin());
+        t.put("amfiCode", fund.amfiCode());
         t.put("folioNo", folio);
         t.put("type", type);
         t.put("amount", money(amount));
@@ -282,14 +300,14 @@ public class SyntheticDataGenerator {
         t.put("lock-inFlag", "N");
         t.put("lock-inDays", "0");
         t.put("mode", "PHYSICAL");
-        t.put("narration", narration + " - " + s[1]);
+        t.put("narration", narration + " - " + fund.scheme());
         t.put("transactionDate", date.toString());
         return t;
     }
 
     // -------------------------------------------------------------- insurance
 
-    private List<ObjectNode> insurancePolicies(Persona p, int index, List<Debit> autoDebits) {
+    private List<ObjectNode> insurancePolicies(Persona p, int index, List<Movement> autoDebits) {
         Random rng = rngFor(index, "insurance");
         List<ObjectNode> out = new ArrayList<>();
         Object[][] specs = {
@@ -316,7 +334,7 @@ public class SyntheticDataGenerator {
                 t.put("type", "PREMIUM_PAYMENT");
                 t.put("amount", money(premium));
                 t.put("narration", "Annual premium - " + name);
-                autoDebits.add(new Debit(due.atTime(7, 30), premium, "ACH/PREMIUM/" + insurer.toUpperCase()));
+                autoDebits.add(Movement.debit(due.atTime(7, 30), premium, "ACH/PREMIUM/" + insurer.toUpperCase()));
             }
 
             ObjectNode account = account("insurance_policies", "XXXXXX" + policyNumber.substring(policyNumber.length() - 4), index, "INS" + n, p);
@@ -411,54 +429,63 @@ public class SyntheticDataGenerator {
 
     // --------------------------------------------------------------- equities
 
-    private ObjectNode equities(Persona p, int index) {
+    private ObjectNode equities(Persona p, int index, List<Movement> autoDebits) {
         Random rng = rngFor(index, "equities");
-        int count = 3 + rng.nextInt(STOCKS.length - 2);
+        List<PriceBook.Stock> all = prices.stocks();
+        int count = 3 + rng.nextInt(3);
         ArrayNode holdings = mapper.createArrayNode();
         ArrayNode txnArray = mapper.createArrayNode();
         BigDecimal totalValue = BigDecimal.ZERO;
         int n = 0;
 
         for (int k = 0; k < count; k++) {
-            String[] s = STOCKS[(index + k) % STOCKS.length];
-            BigDecimal price = new BigDecimal(s[2]);
+            PriceBook.Stock stock = all.get((index + k) % all.size());
             long units = 0;
             for (YearMonth m = YearMonth.from(from); !m.isAfter(YearMonth.from(to)); m = m.plusMonths(1)) {
-                price = drift(rng, price, 0.05, 2);
                 boolean buy = units == 0 || rng.nextInt(4) == 0;
                 boolean sell = !buy && units > 5 && rng.nextInt(10) == 0;
                 if (!buy && !sell) {
                     continue;
                 }
-                LocalDateTime at = m.atDay(3 + rng.nextInt(20)).atTime(10, 15 + rng.nextInt(40));
+                LocalDateTime at = tradingDay(m.atDay(3 + rng.nextInt(20))).atTime(10, 15 + rng.nextInt(40));
                 if (at.toLocalDate().isAfter(to)) {
                     continue;
                 }
+                BigDecimal price = prices.close(stock.symbol(), at.toLocalDate());
                 long qty = buy ? 2 + rng.nextInt(9) : Math.max(1, units / 3);
                 units += buy ? qty : -qty;
+                BigDecimal value = price.multiply(BigDecimal.valueOf(qty)).setScale(2, RoundingMode.HALF_UP);
                 ObjectNode t = txnArray.addObject();
                 t.put("txnId", String.format("Q%02d%06d", index + 1, ++n));
                 t.put("orderId", String.format("ORD%010d", Math.abs(rng.nextLong() % 10_000_000_000L)));
-                t.put("companyName", s[0]);
+                t.put("companyName", stock.name());
                 t.put("transactionDateTime", at.format(TS));
-                t.put("exchange", rng.nextBoolean() ? "NSE" : "BSE");
-                t.put("isin", s[1]);
-                t.put("isinDescription", s[0] + " Equity Shares");
+                t.put("exchange", "NSE");
+                t.put("isin", stock.isin());
+                t.put("isinDescription", stock.name() + " Equity Shares");
                 t.put("equityCategory", "EQUITY");
                 t.put("type", buy ? "BUY" : "SELL");
                 t.put("units", String.valueOf(qty));
                 t.put("rate", money(price));
-                t.put("tradeValue", money(price.multiply(BigDecimal.valueOf(qty))));
-                t.put("narration", (buy ? "Bought " : "Sold ") + qty + " " + s[0]);
+                t.put("tradeValue", money(value));
+                t.put("narration", (buy ? "Bought " : "Sold ") + qty + " " + stock.name());
+                // The money for a buy leaves the savings account the day before; a sale's proceeds come back after.
+                if (buy) {
+                    autoDebits.add(Movement.debit(at.toLocalDate().minusDays(1).atTime(17, 0), value, "NEFT/DEMAT/FUNDS TRANSFER"));
+                } else {
+                    LocalDate credited = at.toLocalDate().plusDays(1).isAfter(to) ? to : at.toLocalDate().plusDays(1);
+                    autoDebits.add(Movement.credit(credited.atTime(17, 0), value, "NEFT/DEMAT/SALE PROCEEDS"));
+                }
             }
-            BigDecimal value = price.multiply(BigDecimal.valueOf(units)).setScale(2, RoundingMode.HALF_UP);
+            BigDecimal lastPrice = prices.close(stock.symbol(), to);
+            BigDecimal value = lastPrice.multiply(BigDecimal.valueOf(units)).setScale(2, RoundingMode.HALF_UP);
             totalValue = totalValue.add(value);
             ObjectNode h = holdings.addObject();
-            h.put("issuerName", s[0]);
-            h.put("isin", s[1]);
-            h.put("isinDescription", s[0] + " Equity Shares");
+            h.put("issuerName", stock.name());
+            h.put("isin", stock.isin());
+            h.put("isinDescription", stock.name() + " Equity Shares");
             h.put("units", String.valueOf(units));
-            h.put("lastTradedPrice", money(price));
+            h.put("lastTradedPrice", money(lastPrice));
         }
 
         ObjectNode account = account("equities", String.format("XXXXXXXXXXXX%04d", rng.nextInt(10_000)), index, "EQ", p);
@@ -467,6 +494,15 @@ public class SyntheticDataGenerator {
         summary.putObject("investment").putObject("holdings").set("holding", holdings);
         account.set("transactions", transactions(txnArray));
         return account;
+    }
+
+    /** Markets are shut at weekends; a trade picked for one happens the following Monday. */
+    private static LocalDate tradingDay(LocalDate day) {
+        return switch (day.getDayOfWeek()) {
+            case SATURDAY -> day.plusDays(2);
+            case SUNDAY -> day.plusDays(1);
+            default -> day;
+        };
     }
 
     // ---------------------------------------------------------------- helpers
@@ -524,6 +560,26 @@ public class SyntheticDataGenerator {
         return new Random(seed * 1_000_003L + index * 7_919L + stream.hashCode());
     }
 
+    /** Splits {@code total} into {@code count} uneven payments that add up to it exactly, to the paisa. */
+    private static List<BigDecimal> split(Random rng, double total, int count) {
+        double[] weights = new double[count];
+        double sum = 0;
+        for (int i = 0; i < count; i++) {
+            weights[i] = 0.4 + rng.nextDouble();
+            sum += weights[i];
+        }
+        BigDecimal target = BigDecimal.valueOf(total).setScale(2, RoundingMode.HALF_UP);
+        List<BigDecimal> parts = new ArrayList<>();
+        BigDecimal used = BigDecimal.ZERO;
+        for (int i = 0; i < count - 1; i++) {
+            BigDecimal part = target.multiply(BigDecimal.valueOf(weights[i] / sum)).setScale(2, RoundingMode.HALF_UP).max(new BigDecimal("10.00"));
+            parts.add(part);
+            used = used.add(part);
+        }
+        parts.add(target.subtract(used).max(new BigDecimal("10.00")));
+        return parts;
+    }
+
     private static BigDecimal between(Random rng, BigDecimal lo, BigDecimal hi) {
         BigDecimal span = hi.subtract(lo);
         return lo.add(span.multiply(BigDecimal.valueOf(rng.nextDouble()))).setScale(2, RoundingMode.HALF_UP);
@@ -549,6 +605,14 @@ public class SyntheticDataGenerator {
     private record Txn(LocalDateTime at, String type, String mode, BigDecimal amount, String narration) {
     }
 
-    private record Debit(LocalDateTime at, BigDecimal amount, String narration) {
+    /** Money moving through the customer's bank account because of another account (SIP, premium, trade). */
+    private record Movement(LocalDateTime at, String type, BigDecimal amount, String narration) {
+        static Movement debit(LocalDateTime at, BigDecimal amount, String narration) {
+            return new Movement(at, "DEBIT", amount, narration);
+        }
+
+        static Movement credit(LocalDateTime at, BigDecimal amount, String narration) {
+            return new Movement(at, "CREDIT", amount, narration);
+        }
     }
 }

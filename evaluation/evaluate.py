@@ -51,10 +51,11 @@ DEBIT_KINDS = {
     "UPI/METRORIDE/": "transport",
     "ATM/": "cash",
     "ACH/SIP/": "sip",
+    "NEFT/DEMAT/": "share_purchase",
     "ACH/PREMIUM/": "premium_debit",
 }
 # Money moved into the user's own investments is not spending.
-NOT_SPENDING = {"sip"}
+NOT_SPENDING = {"sip", "share_purchase"}
 
 
 @dataclass

@@ -57,7 +57,8 @@ class QueryEngineTest {
     void spendingExcludesSipDebitsButIncludesPremiumDebits() {
         ComputedAnswer a = run(QueryPlan.of(Intent.SPEND_TOTAL));
         BigDecimal expected = rawSum("deposit", "transactionTimestamp", null,
-                t -> t.get("type").asText().equals("DEBIT") && !t.get("narration").asText().startsWith("ACH/SIP/"));
+                t -> t.get("type").asText().equals("DEBIT") && !t.get("narration").asText().startsWith("ACH/SIP/")
+                        && !t.get("narration").asText().startsWith("NEFT/DEMAT/"));
         assertThat(a.figure("total").value()).isEqualByComparingTo(expected);
         assertThat(a.citations()).noneMatch(r -> r.category() == Category.SIP_DEBIT);
         assertThat(a.breakdown()).anyMatch(b -> b.label().equals("Premium debit"));

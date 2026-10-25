@@ -5,7 +5,9 @@ layer over the user's own records. Ask "How much did I spend on groceries last q
 answer comes back with the figures, the records they were computed from, and the consents that
 allowed reading them.
 
-All data is synthetic. There is no live Account Aggregator integration: the ingestion service plays
+The people and accounts are synthetic, but fund NAVs and share prices are real public data (AMFI and
+NSE), and spending proportions follow the MoSPI household survey. See
+[reference data](data-generator/src/main/resources/reference/README.md). There is no live Account Aggregator integration: the ingestion service plays
 the part of the FIPs and the consent manager. See [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) for the
 original design intent.
 
@@ -145,7 +147,7 @@ answered as an income question) is left in to show what the keyword parser still
 | `/accounts` | Linked Accounts | Live: accounts, balances and sync time come from the services. Linking a provider creates and approves a consent; removing one revokes it |
 | `/oracle` | AI Oracle | Live: questions go to `POST /api/query`, and answers show figures, a breakdown and record citations |
 | `/consent` | Consent & Security | Live consent ledger. The profile and active sessions are mock |
-| `/` | Dashboard | Live: net worth, allocation, a 12-month history rebuilt from transactions at today's prices, recent activity, and three insights answered by the same pipeline as the Oracle (`GET /api/customers/{id}/overview`) |
+| `/` | Dashboard | Live: net worth, allocation, a 12-month history rebuilt from transactions at today's prices (market moves are not reflected), recent activity, and three insights answered by the same pipeline as the Oracle (`GET /api/customers/{id}/overview`) |
 
 Privacy Mode (on `/consent`) masks every monetary figure in the app through
 `src/state/PrivacyContext.tsx`. New money values should render through `<Money />` to keep that
