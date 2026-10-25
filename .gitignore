@@ -8,3 +8,6 @@ data/synthetic/
 node_modules/
 dist/
 *.local
+
+# evaluation run output; REPORT.md and BASELINE.md are kept
+evaluation/results/results.json
