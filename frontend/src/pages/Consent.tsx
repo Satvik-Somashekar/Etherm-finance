@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react'
 import { GlassCard } from '../components/GlassCard'
 import { Icon } from '../components/Icon'
-import { accounts, profile, sessions } from '../data/mock'
+import { profile, sessions } from '../data/mock'
 import { FI_TYPE_LABEL } from '../types/fi'
 import { daysUntil, formatDate } from '../lib/format'
 import { usePrivacy } from '../state/PrivacyContext'
+import { useAccounts } from '../state/AccountsContext'
+import { CUSTOMER_ID } from '../lib/api'
 
 const PANELS = [
   {
@@ -18,8 +20,8 @@ const PANELS = [
     icon: 'schedule',
     tone: 'text-secondary',
     title: 'Data Retention',
-    body: 'Fetched financial information is retained only for the life of the consent, then purged from the normalized store on expiry.',
-    footer: 'Auto-purge on expiry',
+    body: 'Revoking a consent deletes the data fetched under it. Once a consent expires, nothing fetched under it can be read or used in an answer.',
+    footer: 'Deleted on revoke',
   },
   {
     icon: 'alternate_email',
@@ -31,9 +33,9 @@ const PANELS = [
   {
     icon: 'receipt_long',
     tone: 'text-primary',
-    title: 'Access Log',
-    body: 'A tamper-evident record of every data request: who asked, which FI types were read, and under which consent artefact.',
-    footer: 'Last entry 4 minutes ago',
+    title: 'Answer Citations',
+    body: 'Every Oracle answer lists the consent artefacts it read under and the record ids each figure was computed from.',
+    footer: 'Per-answer sources',
   },
 ]
 
@@ -41,9 +43,16 @@ export function Consent() {
   const { masked, toggle } = usePrivacy()
   const [copied, setCopied] = useState(false)
 
+  const { accounts, source } = useAccounts()
+  const customerId = source === 'live' ? CUSTOMER_ID : profile.customerId
+  // One row per consent artefact; a consent can cover several accounts at one provider.
   const activeConsents = useMemo(
-    () => accounts.filter((a) => a.consent.status === 'ACTIVE'),
-    [],
+    () => [
+      ...new Map(
+        accounts.filter((a) => a.consent.status === 'ACTIVE').map((a) => [a.consent.consentId, a]),
+      ).values(),
+    ],
+    [accounts],
   )
   const soonest = useMemo(
     () =>
@@ -54,7 +63,7 @@ export function Consent() {
   )
 
   async function copyId() {
-    await navigator.clipboard?.writeText(profile.customerId)
+    await navigator.clipboard?.writeText(customerId)
     setCopied(true)
     window.setTimeout(() => setCopied(false), 1600)
   }
@@ -90,7 +99,7 @@ export function Consent() {
                 </span>
               </div>
               <p className="flex items-center gap-2 text-body-md text-on-surface-variant">
-                ID: {profile.customerId}
+                ID: {customerId}
                 <button
                   type="button"
                   onClick={copyId}
