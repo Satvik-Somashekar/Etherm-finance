@@ -32,7 +32,7 @@ import urllib.request
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -66,6 +66,7 @@ class Txn:
     amount: Decimal
     kind: str  # e.g. groceries, salary, premium, mf_buy, epf_contribution
     label: str = ""
+    payee: str = ""
 
 
 @dataclass
@@ -108,8 +109,10 @@ def load_user(path):
                         k = next((v for p, v in DEBIT_KINDS.items() if n.startswith(p)), None)
                         if k is None:
                             raise ValueError(f"unknown narration {n!r}; extend DEBIT_KINDS")
+                    parts = n.split("/")
+                    payee = k if len(parts) < 3 else parts[1] if parts[0] == "UPI" else parts[2]
                     user.txns.append(Txn(f"{ref}:{t['txnId']}", fip, date.fromisoformat(t["valueDate"]),
-                                         d(t["amount"]), k, n.split("/")[1] if "/" in n else n))
+                                         d(t["amount"]), k, n.split("/")[1] if "/" in n else n, payee))
             elif kind == "mutual_funds":
                 user.snapshots.append(Snapshot(f"{ref}:SUMMARY", fip, "balance:MUTUAL_FUNDS", d(s["currentValue"])))
                 for h in s["investment"]["holdings"]["holding"]:
@@ -212,6 +215,12 @@ FLOW_QUESTIONS = [
     ("Did my grocery spending go up {p} compared to the period before?", "SPEND_CATEGORY", {"groceries"}, {"compare": True}),
     ("Did my insurance premiums increase {p} compared to the one before?", "PREMIUMS_PAID", {"premium"}, {"compare": True}),
     ("How did my spending {p} compare with the period before?", "SPEND_TOTAL", SPEND_KINDS, {"compare": True}),
+    ("What is my savings rate {p}?", "SAVINGS_RATE", SPEND_KINDS, {"savings": True}),
+    ("How much did I save {p}?", "SAVINGS_RATE", SPEND_KINDS, {"savings": True}),
+    ("Where did I spend the most money {p}?", "TOP_MERCHANTS", SPEND_KINDS, {"merchants": 5}),
+    ("Show my top 3 merchants {p}", "TOP_MERCHANTS", SPEND_KINDS, {"merchants": 3}),
+    ("Show my spending month by month {p}", "SPEND_TREND", SPEND_KINDS, {"trend": True}),
+    ("What was my average monthly spending {p}?", "SPEND_TREND", SPEND_KINDS, {"trend": True}),
 ]
 
 SNAPSHOT_QUESTIONS = [
@@ -259,6 +268,9 @@ HELD_OUT_FLOW = [
     ("What were my largest transactions {p}?", "TOP_EXPENSES", SPEND_KINDS, {"top": 5}),
     ("How much have I paid towards insurance {p}?", "PREMIUMS_PAID", {"premium"}, {}),
     ("Was my food spending higher {p} than the period before?", "SPEND_CATEGORY", {"food"}, {"compare": True}),
+    ("How much of my salary did I save {p}?", "SAVINGS_RATE", SPEND_KINDS, {"savings": True}),
+    ("Which payees took most of my money {p}?", "TOP_MERCHANTS", SPEND_KINDS, {"merchants": 5}),
+    ("How much do I spend per month on average {p}?", "SPEND_TREND", SPEND_KINDS, {"trend": True}),
 ]
 
 HELD_OUT_SNAPSHOT = [
@@ -294,12 +306,41 @@ SCOPE_QUESTIONS = [
 ]
 
 
-def expected_flow(user, kinds, frm, to, top=None, compare=False):
+def expected_flow(user, kinds, frm, to, top=None, compare=False, extra=None):
+    extra = extra or {}
+
     def pick(a, b):
         return [t for t in user.txns if t.kind in kinds and a <= t.day <= b]
 
     cur = pick(frm, to)
     exp = {}
+    if extra.get("savings"):
+        income = [t for t in user.txns if t.kind == "salary" and frm <= t.day <= to]
+        earned = sum((t.amount for t in income), Decimal(0))
+        spent = sum((t.amount for t in cur), Decimal(0))
+        exp["figs"] = {"income": earned, "spending": spent, "saved": earned - spent}
+        if earned > 0:
+            exp["figs"]["savingsRate"] = ((earned - spent) * 100 / earned).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+        exp["total"] = None
+        exp["cited"] = {t.record_id for t in income + cur}
+        return exp
+    if extra.get("merchants") or extra.get("trend"):
+        groups = {}
+        for t in cur:
+            key = t.payee if extra.get("merchants") else (t.day.year, t.day.month)
+            groups[key] = groups.get(key, Decimal(0)) + t.amount
+        values = sorted(groups.values(), reverse=True)
+        exp["total"] = sum((t.amount for t in cur), Decimal(0))
+        exp["cited"] = {t.record_id for t in cur}
+        if extra.get("merchants"):
+            exp["values"] = values[: extra["merchants"]]
+            exp["figs"] = {"merchants": Decimal(len(values))}
+        else:
+            exp["values"] = values
+            if values:
+                exp["figs"] = {"months": Decimal(len(values)),
+                               "monthlyAverage": (exp["total"] / len(values)).quantize(PAISA, rounding=ROUND_HALF_UP)}
+        return exp
     if top:
         ranked = sorted(cur, key=lambda t: (-t.amount, t.record_id))[:top]
         exp["total"] = sum((t.amount for t in ranked), Decimal(0))
@@ -348,7 +389,7 @@ def prose_ok(resp):
         v = Decimal(m.group(1).replace(",", "")).quantize(PAISA)
         if v not in known:
             bad.append(m.group(0))
-    pcts = {abs(v).quantize(Decimal("0.1")) for k, v in figures(resp).items() if k == "changePct"}
+    pcts = {abs(v).quantize(Decimal("0.1")) for k, v in figures(resp).items() if k in ("changePct", "savingsRate")}
     for m in PERCENT.finditer(resp["answer"]):
         if abs(Decimal(m.group(1))).quantize(Decimal("0.1")) not in pcts:
             bad.append(m.group(0))
@@ -432,7 +473,7 @@ def run_user(user, qset, flow_qs, snapshot_qs, oos_qs, as_of, ask, rows):
     for phrase, (frm, to) in periods(as_of).items():
         for template, intent, kinds, extra in flow_qs:
             q = template.format(p=phrase)
-            exp = expected_flow(user, kinds, frm, to, extra.get("top"), extra.get("compare", False))
+            exp = expected_flow(user, kinds, frm, to, extra.get("top"), extra.get("compare", False), extra)
             status, resp = ask(user, q)
             rows.append(score(user, q, "flow", intent, (frm, to), exp, status, resp) | {"set": qset})
     for q, intent, select in snapshot_qs:
@@ -460,7 +501,11 @@ def score(user, q, group, intent, period, exp, status, resp):
         got = resp.get("period") or {}
         row["period_ok"] = (got.get("from"), got.get("to")) == (period[0].isoformat(), period[1].isoformat())
     figs = figures(resp)
-    checks = [figs.get("total") == exp["total"]]
+    checks = [] if exp["total"] is None else [figs.get("total") == exp["total"]]
+    for k, v in exp.get("figs", {}).items():
+        checks.append(figs.get(k) == v)
+    if "values" in exp:
+        checks.append([Decimal(str(b["value"])) for b in resp.get("breakdown", [])] == exp["values"])
     for k in ("previousTotal", "change"):
         if k in exp:
             checks.append(figs.get(k) == exp[k])

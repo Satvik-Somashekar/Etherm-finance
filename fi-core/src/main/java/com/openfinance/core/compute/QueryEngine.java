@@ -55,6 +55,9 @@ public class QueryEngine {
             case MF_INVESTED -> flow(plan, records, retrieved, "Invested", FinancialRecord::description);
             case EPF_CONTRIBUTIONS -> epf(plan, records, retrieved);
             case TOP_EXPENSES -> top(plan, records);
+            case SAVINGS_RATE -> savings(plan, records, retrieved);
+            case TOP_MERCHANTS -> merchants(plan, records, retrieved);
+            case SPEND_TREND -> trend(plan, records, retrieved);
             case BALANCE -> snapshot(plan, records, plan.fiTypes().isEmpty() || plan.fiTypes().containsAll(ASSET_TYPES)
                     ? "Net worth" : "Current value", r -> accountLabel(r));
             case HOLDINGS -> snapshot(plan, records, "Holdings value", FinancialRecord::description);
@@ -73,6 +76,12 @@ public class QueryEngine {
             case SPEND_TOTAL, TOP_EXPENSES -> new RecordFilter(Set.of(FiType.DEPOSIT), tx,
                     plan.categories().isEmpty() ? Category.SPENDING : plan.categories(), Direction.DEBIT, from, to);
             case SPEND_CATEGORY -> new RecordFilter(Set.of(FiType.DEPOSIT), tx, plan.categories(), Direction.DEBIT, from, to);
+            case TOP_MERCHANTS, SPEND_TREND -> new RecordFilter(Set.of(FiType.DEPOSIT), tx, Category.SPENDING, Direction.DEBIT, from, to);
+            case SAVINGS_RATE -> {
+                Set<Category> both = EnumSet.copyOf(Category.SPENDING);
+                both.add(Category.SALARY);
+                yield new RecordFilter(Set.of(FiType.DEPOSIT), tx, both, null, from, to);
+            }
             case INCOME -> new RecordFilter(Set.of(FiType.DEPOSIT), tx,
                     plan.categories().isEmpty() ? Set.of(Category.SALARY) : plan.categories(), Direction.CREDIT, from, to);
             case PREMIUMS_PAID -> new RecordFilter(Set.of(FiType.INSURANCE_POLICIES), tx,
@@ -151,6 +160,64 @@ public class QueryEngine {
                 new Figure("total", "Top " + top.size() + " spends", sum(top), Unit.INR, ids(top)),
                 new Figure("count", "Spends considered", BigDecimal.valueOf(records.size()), Unit.COUNT, ids(records)));
         return new ComputedAnswer(plan, figures, items, top, records.size());
+    }
+
+    /** Salary received minus spending, as a share of salary. Spending is debits only; salary is credits only. */
+    private ComputedAnswer savings(QueryPlan plan, List<FinancialRecord> records, List<FinancialRecord> retrieved) {
+        List<FinancialRecord> income = records.stream().filter(r -> r.category() == Category.SALARY).toList();
+        List<FinancialRecord> spending = records.stream()
+                .filter(r -> r.direction() == Direction.DEBIT && Category.SPENDING.contains(r.category())).toList();
+        BigDecimal earned = sum(income);
+        BigDecimal spent = sum(spending);
+        BigDecimal saved = earned.subtract(spent);
+        List<FinancialRecord> used = new ArrayList<>(income);
+        used.addAll(spending);
+        List<Figure> figures = new ArrayList<>();
+        figures.add(new Figure("income", "Salary received", earned, Unit.INR, ids(income)));
+        figures.add(new Figure("spending", "Spent", spent, Unit.INR, ids(spending)));
+        figures.add(new Figure("saved", "Left over", saved, Unit.INR, ids(used)));
+        if (earned.signum() > 0) {
+            figures.add(new Figure("savingsRate", "Savings rate", saved.multiply(BigDecimal.valueOf(100))
+                    .divide(earned, 1, RoundingMode.HALF_UP), Unit.PERCENT, ids(used)));
+        }
+        List<BreakdownItem> items = List.of(
+                new BreakdownItem("Salary received", earned, ids(income)),
+                new BreakdownItem("Spent", spent, ids(spending)));
+        return new ComputedAnswer(plan, figures, items, used, retrieved.size());
+    }
+
+    /** Spending grouped by payee, largest first; the breakdown keeps the top N, the total covers all. */
+    private ComputedAnswer merchants(QueryPlan plan, List<FinancialRecord> records, List<FinancialRecord> retrieved) {
+        List<BreakdownItem> all = groupSum(records, r -> payeeName(nonNull(r.counterparty(), label(r.category()))));
+        List<Figure> figures = List.of(
+                new Figure("total", "Total spent", sum(records), Unit.INR, ids(records)),
+                new Figure("count", "Transactions", BigDecimal.valueOf(records.size()), Unit.COUNT, ids(records)),
+                new Figure("merchants", "Payees", BigDecimal.valueOf(all.size()), Unit.COUNT, ids(records)));
+        return new ComputedAnswer(plan, figures, all.stream().limit(plan.topN()).toList(), records, retrieved.size());
+    }
+
+    /** Spending per calendar month, with the average over the months that had any spending. */
+    private ComputedAnswer trend(QueryPlan plan, List<FinancialRecord> records, List<FinancialRecord> retrieved) {
+        List<BreakdownItem> months = groupSum(records, r -> monthName(YearMonth.from(r.date())));
+        List<Figure> figures = new ArrayList<>();
+        figures.add(new Figure("total", "Total spent", sum(records), Unit.INR, ids(records)));
+        figures.add(new Figure("count", "Transactions", BigDecimal.valueOf(records.size()), Unit.COUNT, ids(records)));
+        figures.add(new Figure("months", "Months with spending", BigDecimal.valueOf(months.size()), Unit.COUNT, ids(records)));
+        if (!months.isEmpty()) {
+            figures.add(new Figure("monthlyAverage", "Average per month", sum(records)
+                    .divide(BigDecimal.valueOf(months.size()), 2, RoundingMode.HALF_UP), Unit.INR, ids(records)));
+        }
+        return new ComputedAnswer(plan, figures, months, records, retrieved.size());
+    }
+
+    /** "FRESHMART" -> "Freshmart"; names already in mixed case are left alone. */
+    private static String payeeName(String name) {
+        return name.equals(name.toUpperCase(Locale.ROOT)) && name.length() > 1
+                ? name.charAt(0) + name.substring(1).toLowerCase(Locale.ROOT) : name;
+    }
+
+    private static String monthName(YearMonth ym) {
+        return ym.getMonth().getDisplayName(java.time.format.TextStyle.FULL, Locale.ENGLISH) + " " + ym.getYear();
     }
 
     private ComputedAnswer snapshot(QueryPlan plan, List<FinancialRecord> records, String totalLabel,

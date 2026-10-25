@@ -45,6 +45,13 @@ class QuestionParserTest {
             "What is my stock portfolio worth?|BALANCE",
             "Should I buy more Infosys shares?|UNSUPPORTED",
             "Is now a good time to invest in mutual funds?|UNSUPPORTED",
+            // Wider questions
+            "What is my savings rate this year?|SAVINGS_RATE",
+            "How much did I save last quarter?|SAVINGS_RATE",
+            "Where do I spend the most money?|TOP_MERCHANTS",
+            "Show my top 3 merchants last month|TOP_MERCHANTS",
+            "What is my average monthly spending?|SPEND_TREND",
+            "Show my spending month by month|SPEND_TREND",
     })
     void recognisesIntent(String question, Intent expected) {
         assertThat(parse(question).intent()).isEqualTo(expected);

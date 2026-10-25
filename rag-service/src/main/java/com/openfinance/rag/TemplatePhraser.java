@@ -15,7 +15,8 @@ import java.math.BigDecimal;
 public class TemplatePhraser implements AnswerPhraser {
 
     static final String UNSUPPORTED = "I can answer questions about your spending (overall or by category), "
-            + "largest expenses, salary, insurance premiums and cover, mutual fund investments, EPF contributions, "
+            + "largest expenses, where your money goes, month-by-month spending, how much you save, salary, "
+            + "insurance premiums and cover, mutual fund investments, EPF contributions, "
             + "and the current value of your accounts. Try \"How much did I spend on groceries last quarter?\"";
 
     @Override
@@ -56,9 +57,25 @@ public class TemplatePhraser implements AnswerPhraser {
             case HOLDINGS -> "Your " + count(answer, "holding") + " " + (answer.figure("count").value().intValue() == 1 ? "is" : "are") + " worth {total}. The largest is " + top + " at {item1_value}.";
             case INSURANCE_COVER -> "Your policies carry a total sum assured of {total}"
                     + (answer.breakdown().size() > 1 ? ", the largest being " + top + " ({item1_value})." : ".");
+            case SAVINGS_RATE -> savings(answer, period);
+            case TOP_MERCHANTS -> "Most of your spending " + period + " went to " + top + " ({item1_value})"
+                    + (answer.breakdown().size() > 1 ? ", then " + facts.label(2) + " ({item2_value})" : "")
+                    + (answer.breakdown().size() > 2 ? " and " + facts.label(3) + " ({item3_value})" : "")
+                    + ". In total you spent {total} across {merchants} payees.";
+            case SPEND_TREND -> "You spent {total} " + period + ", an average of {monthlyAverage} a month. "
+                    + top + " was the highest month at {item1_value}.";
             case UNSUPPORTED -> UNSUPPORTED;
         };
         return sentence + comparison(answer);
+    }
+
+    private static String savings(ComputedAnswer answer, String period) {
+        Figure saved = answer.figure("saved");
+        if (saved != null && FactSheet.isNegative(saved)) {
+            return "You spent more than your salary " + period + ": {spending} spent against {income} received.";
+        }
+        return "You received {income} in salary " + period + " and spent {spending}, leaving {saved}"
+                + (answer.figure("savingsRate") != null ? ", a savings rate of {savingsRate}." : ".");
     }
 
     /** "{count} payment" or "{count} payments", depending on the computed count. */

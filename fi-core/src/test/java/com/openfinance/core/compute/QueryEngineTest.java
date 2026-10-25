@@ -116,6 +116,44 @@ class QueryEngineTest {
     }
 
     @Test
+    void savingsRateIsSalaryMinusSpendingOverSalary() {
+        ComputedAnswer a = run(QueryPlan.of(Intent.SAVINGS_RATE).withPeriod(Q3));
+        BigDecimal salary = rawSum("deposit", "transactionTimestamp", Q3, t -> t.get("narration").asText().contains("SALARY"));
+        BigDecimal spent = rawSum("deposit", "transactionTimestamp", Q3,
+                t -> t.get("type").asText().equals("DEBIT") && !t.get("narration").asText().startsWith("ACH/SIP/")
+                        && !t.get("narration").asText().startsWith("NEFT/DEMAT/"));
+        assertThat(a.figure("income").value()).isEqualByComparingTo(salary);
+        assertThat(a.figure("spending").value()).isEqualByComparingTo(spent);
+        assertThat(a.figure("saved").value()).isEqualByComparingTo(salary.subtract(spent));
+        assertThat(a.figure("savingsRate").value()).isEqualByComparingTo(
+                salary.subtract(spent).multiply(BigDecimal.valueOf(100)).divide(salary, 1, java.math.RoundingMode.HALF_UP));
+        assertThat(a.citations()).noneMatch(r -> r.category() == Category.SIP_DEBIT || r.category() == Category.INVESTMENT_DEBIT);
+    }
+
+    @Test
+    void merchantsAreGroupedByPayeeAndLimitedToTopN() {
+        ComputedAnswer a = run(QueryPlan.of(Intent.TOP_MERCHANTS).withPeriod(Q3).withTopN(3));
+        BigDecimal spent = rawSum("deposit", "transactionTimestamp", Q3,
+                t -> t.get("type").asText().equals("DEBIT") && !t.get("narration").asText().startsWith("ACH/SIP/")
+                        && !t.get("narration").asText().startsWith("NEFT/DEMAT/"));
+        assertThat(a.figure("total").value()).isEqualByComparingTo(spent);
+        assertThat(a.breakdown()).hasSize(3);
+        assertThat(a.breakdown().get(0).value()).isGreaterThanOrEqualTo(a.breakdown().get(1).value());
+        assertThat(a.breakdown().get(1).value()).isGreaterThanOrEqualTo(a.breakdown().get(2).value());
+        assertThat(a.figure("merchants").value().intValue()).isGreaterThan(3);
+    }
+
+    @Test
+    void spendTrendHasOneRowPerMonthAndAnAverage() {
+        ComputedAnswer a = run(QueryPlan.of(Intent.SPEND_TREND));
+        assertThat(a.breakdown()).hasSize(12);
+        BigDecimal months = a.breakdown().stream().map(BreakdownItem::value).reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(months).isEqualByComparingTo(a.figure("total").value());
+        assertThat(a.figure("monthlyAverage").value()).isEqualByComparingTo(
+                a.figure("total").value().divide(BigDecimal.valueOf(12), 2, java.math.RoundingMode.HALF_UP));
+    }
+
+    @Test
     void calendarRangesStepBackByWholeMonths() {
         assertThat(Q3.previous().from()).isEqualTo(LocalDate.of(2026, 4, 1));
         assertThat(Q3.previous().to()).isEqualTo(LocalDate.of(2026, 6, 30));

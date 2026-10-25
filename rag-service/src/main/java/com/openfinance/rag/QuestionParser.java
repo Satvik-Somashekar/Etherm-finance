@@ -72,6 +72,23 @@ public class QuestionParser {
                 " recommend", " advice", " advise", " best ")) {
             return QueryPlan.of(Intent.UNSUPPORTED);
         }
+        if (has(q, "savings rate", "saving rate", "how much did i save", "how much do i save", "how much have i saved",
+                "how much i saved", "am i saving", "did i save", " i saved ", "left over", "leftover", "left after")
+                && !has(q, "savings account")) {
+            return QueryPlan.of(Intent.SAVINGS_RATE);
+        }
+        if (has(q, "merchant", "payee", "where do i spend", "where did i spend", "where does my money go",
+                "where did my money go", "spend the most", "spent the most", "which shops", "most often")
+                && !has(q, "category", "categories")) {
+            Matcher m = TOP_N.matcher(q);
+            int n = m.find() ? Integer.parseInt(m.group(1) != null ? m.group(1) : m.group(2)) : 5;
+            return QueryPlan.of(Intent.TOP_MERCHANTS).withTopN(Math.max(1, Math.min(n, 20)));
+        }
+        if (has(q, "month by month", "each month", "per month", "every month", "monthly spend", "monthly expense",
+                "monthly average", "average monthly", "on average", "spending trend", "spend trend", "trend")
+                && has(q, "spend", "spent", "expense", "spending", "outflow")) {
+            return QueryPlan.of(Intent.SPEND_TREND);
+        }
         if (has(q, "biggest", "largest", "highest", " top ") && has(q, "expense", "spend", "purchase", "transaction", "payment", "debit")) {
             Matcher m = TOP_N.matcher(q);
             int n = m.find() ? Integer.parseInt(m.group(1) != null ? m.group(1) : m.group(2)) : 5;
@@ -136,7 +153,8 @@ public class QuestionParser {
 
     private static boolean isFlow(Intent i) {
         return switch (i) {
-            case SPEND_TOTAL, SPEND_CATEGORY, TOP_EXPENSES, INCOME, PREMIUMS_PAID, MF_INVESTED, EPF_CONTRIBUTIONS -> true;
+            case SPEND_TOTAL, SPEND_CATEGORY, TOP_EXPENSES, INCOME, PREMIUMS_PAID, MF_INVESTED, EPF_CONTRIBUTIONS,
+                 SAVINGS_RATE, TOP_MERCHANTS, SPEND_TREND -> true;
             default -> false;
         };
     }

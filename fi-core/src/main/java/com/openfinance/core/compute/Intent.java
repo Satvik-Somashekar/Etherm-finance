@@ -22,6 +22,12 @@ public enum Intent {
     HOLDINGS,
     /** Sum assured on insurance policies. */
     INSURANCE_COVER,
+    /** Share of salary left after spending, with the salary and spending it was computed from. */
+    SAVINGS_RATE,
+    /** Where spending went, grouped by merchant or payee. */
+    TOP_MERCHANTS,
+    /** Spending month by month, with the monthly average. */
+    SPEND_TREND,
     /** The question did not match anything the compute layer can answer. */
     UNSUPPORTED
 }
