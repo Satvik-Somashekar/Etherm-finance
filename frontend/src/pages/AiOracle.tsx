@@ -23,12 +23,13 @@ const EXAMPLES = DEMO ? DEMO_QUESTIONS : [
   'How much did I spend on groceries last quarter?',
   'What is my net worth?',
   'Show my 3 biggest expenses last month',
+  'Export my transactions for last quarter as CSV',
 ]
 
 const INTRO: ChatMessage = {
   id: 'intro',
   role: 'oracle',
-  text: 'Ask about your spending, salary, premiums, investments, EPF or balances. Every figure is computed from your consented records, and each answer lists the records it used.',
+  text: 'Ask about your spending, salary, premiums, investments, EPF or balances, or ask for your transactions or a monthly report as a CSV file. Every figure is computed from your consented records, and each answer lists the records it used.',
 }
 
 const SEEDED: ChatMessage[] = [

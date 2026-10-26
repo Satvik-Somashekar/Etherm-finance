@@ -1,6 +1,7 @@
+import { useState } from 'react'
 import { Icon } from './Icon'
 import { Money } from './Money'
-import type { Figure, QueryResult } from '../lib/api'
+import { ApiError, downloadExport, type Figure, type QueryResult } from '../lib/api'
 
 const BAR_COLOUR = ['bg-primary', 'bg-tertiary', 'bg-secondary', 'bg-primary-container']
 const MAX_CHIPS = 12
@@ -21,6 +22,8 @@ export function GroundedAnswer({ result }: { result: QueryResult }) {
 
   return (
     <>
+      {result.export && <ExportDownload file={result.export} />}
+
       {metrics.length > 0 && (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {metrics.slice(0, 6).map((figure) => (
@@ -111,4 +114,45 @@ function FigureValue({ figure }: { figure: Figure }) {
     )
   }
   return <span className="text-headline-md text-secondary">{figure.value}</span>
+}
+
+/** The file the question asked for. It is built from consented records when the button is pressed. */
+function ExportDownload({ file }: { file: NonNullable<QueryResult['export']> }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function run() {
+    setBusy(true)
+    setError(null)
+    try {
+      await downloadExport(file.kind, {
+        from: file.from ?? undefined,
+        to: file.to ?? undefined,
+        categories: file.categories,
+      })
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Could not reach the services.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <button
+        type="button"
+        onClick={run}
+        disabled={busy}
+        className="flex w-fit items-center gap-2 rounded bg-primary px-5 py-3 text-label-md text-on-primary shadow-glow transition-all hover:shadow-glow-lg disabled:opacity-60"
+      >
+        <Icon name="download" size={20} />
+        {busy ? 'Preparing...' : file.kind === 'report' ? 'Download monthly report (CSV)' : 'Download transactions (CSV)'}
+      </button>
+      {error && (
+        <p role="alert" className="text-label-sm text-error">
+          {error}
+        </p>
+      )}
+    </div>
+  )
 }

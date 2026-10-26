@@ -59,7 +59,7 @@ class ExportServiceTest {
 
     @Test
     void filtersNarrowTheRows() {
-        String csv = exports.transactionsCsv("u", LocalDate.parse("2026-08-01"), null, Category.SALARY, FiType.DEPOSIT);
+        String csv = exports.transactionsCsv("u", LocalDate.parse("2026-08-01"), null, java.util.Set.of(Category.SALARY), FiType.DEPOSIT);
         assertThat(csv.lines().toList()).hasSize(2);
         assertThat(csv).contains("A1:5");
     }

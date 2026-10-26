@@ -56,7 +56,25 @@ public class QueryService {
                 computed.figures(), computed.breakdown(),
                 computed.citations().stream().map(QueryService::cite).toList(),
                 new QueryResponse.Grounding(consentIds, found.visible(), found.records().size(),
-                        computed.citations().size(), today));
+                        computed.citations().size(), today),
+                export(plan, computed));
+    }
+
+    private static QueryResponse.Export export(QueryPlan plan, ComputedAnswer computed) {
+        if (computed.empty()) {
+            return null;
+        }
+        String kind = switch (plan.intent()) {
+            case EXPORT_TRANSACTIONS -> "transactions";
+            case EXPORT_REPORT -> "report";
+            default -> null;
+        };
+        if (kind == null) {
+            return null;
+        }
+        return new QueryResponse.Export(kind, plan.period() == null ? null : plan.period().from(),
+                plan.period() == null ? null : plan.period().to(),
+                plan.categories().stream().map(Enum::name).sorted().toList());
     }
 
     List<String> consents(QueryRequest request) {

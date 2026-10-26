@@ -154,6 +154,36 @@ class QueryEngineTest {
     }
 
     @Test
+    void exportCountsEveryTransactionInThePeriodFromTheRawData() {
+        ComputedAnswer a = run(QueryPlan.of(Intent.EXPORT_TRANSACTIONS).withPeriod(Q3));
+        long rows = 0;
+        for (SourceAccount s : raw) {
+            String type = s.account().get("type").asText();
+            String dateField = switch (type) {
+                case "deposit" -> "valueDate";
+                case "mutual_funds" -> "transactionDate";
+                case "equities" -> "transactionDateTime";
+                default -> "txnDate";
+            };
+            for (JsonNode t : s.account().at("/transactions/transaction")) {
+                if (Q3.contains(LocalDate.parse(t.get(dateField).asText().substring(0, 10)))) {
+                    rows++;
+                }
+            }
+        }
+        assertThat(a.figure("count").value()).isEqualByComparingTo(BigDecimal.valueOf(rows));
+        assertThat(a.citations()).hasSize((int) rows);
+    }
+
+    @Test
+    void exportCanBeNarrowedToCategoriesAndReportCountsMonths() {
+        ComputedAnswer salary = run(QueryPlan.of(Intent.EXPORT_TRANSACTIONS).withCategories(Set.of(Category.SALARY)).withPeriod(Q3));
+        assertThat(salary.figure("count").value()).isEqualByComparingTo("3");
+        ComputedAnswer report = run(QueryPlan.of(Intent.EXPORT_REPORT).withPeriod(Q3));
+        assertThat(report.figure("months").value()).isEqualByComparingTo("3");
+    }
+
+    @Test
     void calendarRangesStepBackByWholeMonths() {
         assertThat(Q3.previous().from()).isEqualTo(LocalDate.of(2026, 4, 1));
         assertThat(Q3.previous().to()).isEqualTo(LocalDate.of(2026, 6, 30));

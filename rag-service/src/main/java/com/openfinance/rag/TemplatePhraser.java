@@ -17,7 +17,8 @@ public class TemplatePhraser implements AnswerPhraser {
     static final String UNSUPPORTED = "I can answer questions about your spending (overall or by category), "
             + "largest expenses, where your money goes, month-by-month spending, how much you save, salary, "
             + "insurance premiums and cover, mutual fund investments, EPF contributions, "
-            + "and the current value of your accounts. Try \"How much did I spend on groceries last quarter?\"";
+            + "and the current value of your accounts. I can also prepare your transactions or a monthly report "
+            + "as a CSV file to download. Try \"How much did I spend on groceries last quarter?\"";
 
     @Override
     public Phrasing phrase(String question, ComputedAnswer answer) {
@@ -62,6 +63,11 @@ public class TemplatePhraser implements AnswerPhraser {
                     + (answer.breakdown().size() > 1 ? ", then " + facts.label(2) + " ({item2_value})" : "")
                     + (answer.breakdown().size() > 2 ? " and " + facts.label(3) + " ({item3_value})" : "")
                     + ". In total you spent {total} across {merchants} payees.";
+            case EXPORT_TRANSACTIONS -> "I prepared a CSV of {count} " + (plan.categories().isEmpty() ? "" : categories(plan) + " ")
+                    + "transactions" + (plan.period() == null ? "" : " (" + period + ")")
+                    + ". Use the Download button to save it.";
+            case EXPORT_REPORT -> "I prepared a monthly report covering {months} months" + (plan.period() == null ? "" : " (" + period + ")")
+                    + ", built from {count} transactions. Use the Download button to save it.";
             case SPEND_TREND -> "You spent {total} " + period + ", an average of {monthlyAverage} a month. "
                     + top + " was the highest month at {item1_value}.";
             case UNSUPPORTED -> UNSUPPORTED;

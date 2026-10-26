@@ -47,11 +47,15 @@ export type ExportKind = 'transactions' | 'report'
  * Downloads a CSV the Java services build from the customer's consented records. The optional
  * range is yyyy-MM-dd. Not available in the public demo, which has no backend.
  */
-export async function downloadExport(kind: ExportKind, range: { from?: string; to?: string } = {}): Promise<void> {
+export async function downloadExport(
+  kind: ExportKind,
+  range: { from?: string; to?: string; categories?: string[] } = {},
+): Promise<void> {
   if (DEMO) throw new ApiError(503, 'Exports need the live services, which the public demo does not run.')
   const query = new URLSearchParams()
   if (range.from) query.set('from', range.from)
   if (range.to) query.set('to', range.to)
+  if (range.categories?.length) query.set('category', range.categories.join(','))
   const path = `/svc/rag/api/customers/${encodeURIComponent(currentCustomerId())}/export/${kind}.csv`
   const response = await fetch(query.size ? `${path}?${query}` : path)
   if (!response.ok) {
@@ -152,6 +156,8 @@ export interface QueryResult {
     recordsCited: number
     asOf: string
   }
+  /** Present when the question asked for a file; download it with `downloadExport`. */
+  export: { kind: ExportKind; from: string | null; to: string | null; categories: string[] } | null
 }
 
 interface BackendOverview {
