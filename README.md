@@ -84,8 +84,10 @@ ETHERM_AS_OF=2026-10-25 java -jar rag-service/target/rag-service-0.0.1-SNAPSHOT.
 | --- | --- | --- |
 | `ETHERM_SEED_DIR` | `../data/synthetic` | Where ingestion loads generated data from at startup |
 | `ETHERM_AS_OF` | today (compose pins `2026-10-25`) | The date "last month" and "last quarter" are resolved against. Pinning it keeps relative questions inside the synthetic data window |
-| `ETHERM_PHRASING` | `template` | Set to `claude` to have Claude write the sentence |
+| `ETHERM_PHRASING` | `template` | Set to `claude` or `gemini` to have that model write the sentence |
 | `ANTHROPIC_API_KEY` | | Required when `ETHERM_PHRASING=claude` |
+| `GEMINI_API_KEY` | | Required when `ETHERM_PHRASING=gemini` |
+| `ETHERM_GEMINI_MODEL` | `gemini-3.5-flash` | Gemini model used for phrasing |
 
 ### Try it
 
