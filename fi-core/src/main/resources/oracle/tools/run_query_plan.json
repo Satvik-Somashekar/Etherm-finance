@@ -1,0 +1,33 @@
+{
+  "name": "run_query_plan",
+  "description": "Compute figures from the customer's consented records: filter, optionally group, aggregate, compare and rank. Returns result objects with the record ids behind each number. Never returns raw records. If nothing can be computed, the result carries an emptyReason.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "filter": {
+        "type": "object",
+        "properties": {
+          "fiTypes": {"type": "array", "items": {"enum": ["DEPOSIT","MUTUAL_FUNDS","INSURANCE_POLICIES","EPF","EQUITIES"]}},
+          "accountIds": {"type": "array", "items": {"type": "string"}},
+          "instruments": {"type": "array", "items": {"type": "string"}},
+          "categories": {"type": "array", "items": {"enum": ["SALARY","INTEREST","OTHER_CREDIT","RENT","GROCERIES","FOOD","FUEL","SHOPPING","UTILITIES","TRANSPORT","CASH_WITHDRAWAL","SIP_DEBIT","INVESTMENT_DEBIT","INVESTMENT_CREDIT","PREMIUM_DEBIT","OTHER_DEBIT","MF_PURCHASE","MF_REDEMPTION","EQUITY_BUY","EQUITY_SELL","PREMIUM_PAYMENT","EPF_CONTRIBUTION","EPF_INTEREST","ACCOUNT_BALANCE","HOLDING_VALUE","POLICY_COVER"]}},
+          "merchants": {"type": "array", "items": {"type": "string"}},
+          "dateRange": {"type": "object", "properties": {"from": {"type": "string", "format": "date"}, "to": {"type": "string", "format": "date"}, "label": {"type": "string"}}, "required": ["from", "to"]},
+          "amountRange": {"type": "object", "properties": {"min": {"type": "number"}, "max": {"type": "number"}}}
+        }
+      },
+      "groupBy": {"type": "array", "items": {"enum": ["MONTH","CATEGORY","ACCOUNT","INSTRUMENT","FI_TYPE"]}},
+      "aggregate": {"type": "array", "items": {"enum": ["SUM","COUNT","AVG","MIN","MAX","LATEST","CHANGE","SHARE"]}},
+      "compare": {
+        "type": "object",
+        "properties": {
+          "kind": {"enum": ["PERIOD_VS_PERIOD","GROUP_VS_GROUP"]},
+          "against": {"type": "object", "properties": {"from": {"type": "string", "format": "date"}, "to": {"type": "string", "format": "date"}, "label": {"type": "string"}}, "required": ["from", "to"]},
+          "groupKey": {"type": "string"}
+        },
+        "required": ["kind"]
+      },
+      "rank": {"type": "object", "properties": {"topN": {"type": "integer", "minimum": 1, "maximum": 50}, "direction": {"enum": ["LARGEST","SMALLEST"]}}, "required": ["topN"]}
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "run_rules",
+  "description": "Run Etherm's fixed observation rules over the customer's consented data (concentration, idle cash, emergency buffer, insurance cover, deposit cover, maturities, tax timing). Returns findings with numbers, assumptions, record ids, a rule-written suggested action and a disclaimer. Rules never name a security and never say buy or sell.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "ruleIds": {"type": "array", "items": {"type": "string"}, "description": "Omit to run every rule."}
+    }
+  }
+}
