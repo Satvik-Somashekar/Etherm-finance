@@ -4,6 +4,7 @@ import { Icon } from '../components/Icon'
 import { Money } from '../components/Money'
 import { ConnectAccountModal } from '../components/ConnectAccountModal'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { ExportCard } from '../components/ExportCard'
 import { useAccounts, type LinkRequest } from '../state/AccountsContext'
 import { FI_TYPE_ICON, FI_TYPE_LABEL, type FipAccount, type FiType } from '../types/fi'
 import { daysUntil, timeAgo } from '../lib/format'
@@ -102,6 +103,8 @@ export function Accounts() {
             <Icon name="open_in_new" size={16} />
           </button>
         </div>
+
+        <ExportCard />
       </aside>
 
       <div className="flex flex-1 flex-col gap-8">
