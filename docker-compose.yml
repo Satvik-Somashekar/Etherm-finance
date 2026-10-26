@@ -44,4 +44,7 @@ services:
       # Set ETHERM_PHRASING=claude and ANTHROPIC_API_KEY to let Claude phrase answers; templates otherwise.
       ETHERM_PHRASING: ${ETHERM_PHRASING:-template}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # ETHERM_PHRASING=gemini with GEMINI_API_KEY (and optionally ETHERM_GEMINI_MODEL) uses Gemini instead.
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      ETHERM_GEMINI_MODEL: ${ETHERM_GEMINI_MODEL:-gemini-3.5-flash}
     depends_on: [ingestion, retrieval]

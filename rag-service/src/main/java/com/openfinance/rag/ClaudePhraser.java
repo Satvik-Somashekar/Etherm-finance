@@ -61,19 +61,24 @@ public class ClaudePhraser implements AnswerPhraser {
         return fallback.phrase(question, answer);
     }
 
-    private String complete(String question, FactSheet facts, ComputedAnswer answer) {
+    /** What the model is told: the question, the period and what each placeholder means, never a value. */
+    static String userMessage(String question, FactSheet facts, ComputedAnswer answer) {
         String placeholders = facts.descriptions().entrySet().stream()
                 .map(e -> "{" + e.getKey() + "}: " + e.getValue())
                 .collect(Collectors.joining("\n"));
         String labels = labels(facts);
         String period = answer.plan().period() == null ? "all shared data" : answer.plan().period().label();
+        return "Question: " + question + "\nPeriod: " + period + "\nPlaceholders:\n" + placeholders
+                + (labels.isEmpty() ? "" : "\nBreakdown item names (write these placeholders too):\n" + labels);
+    }
+
+    private String complete(String question, FactSheet facts, ComputedAnswer answer) {
         MessageCreateParams params = MessageCreateParams.builder()
                 .model(model)
                 .maxTokens(1024L)
                 .system(SYSTEM)
                 .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.LOW).build())
-                .addUserMessage("Question: " + question + "\nPeriod: " + period + "\nPlaceholders:\n" + placeholders
-                        + (labels.isEmpty() ? "" : "\nBreakdown item names (write these placeholders too):\n" + labels))
+                .addUserMessage(userMessage(question, facts, answer))
                 .build();
         Message response = client.messages().create(params);
         if (response.stopReason().map(r -> r.equals(StopReason.REFUSAL)).orElse(false)) {

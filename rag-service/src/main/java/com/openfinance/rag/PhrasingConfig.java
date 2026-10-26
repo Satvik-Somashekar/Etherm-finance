@@ -17,13 +17,24 @@ public class PhrasingConfig {
 
     /**
      * {@code etherm.phrasing.provider}: {@code template} always uses templates; {@code claude} uses
-     * the model when {@code ANTHROPIC_API_KEY} is set. Either way the numbers come from Java.
+     * the model when {@code ANTHROPIC_API_KEY} is set; {@code gemini} uses Gemini when
+     * {@code GEMINI_API_KEY} is set. Either way the numbers come from Java.
      */
     @Bean
     @Primary
     AnswerPhraser answerPhraser(TemplatePhraser template,
                                 @Value("${etherm.phrasing.provider:template}") String provider,
-                                @Value("${etherm.phrasing.model:claude-opus-5-5}") String model) {
+                                @Value("${etherm.phrasing.model:claude-opus-5-5}") String model,
+                                @Value("${etherm.phrasing.gemini-model:gemini-3.5-flash}") String geminiModel) {
+        String geminiKey = System.getenv("GEMINI_API_KEY");
+        if ("gemini".equalsIgnoreCase(provider)) {
+            if (geminiKey == null || geminiKey.isBlank()) {
+                log.warn("etherm.phrasing.provider=gemini but GEMINI_API_KEY is not set; using templates");
+                return template;
+            }
+            log.info("Phrasing with {} (placeholders only; template fallback)", geminiModel);
+            return new GeminiPhraser(GeminiPhraser.DEFAULT_BASE_URL, geminiKey, geminiModel, template);
+        }
         String key = System.getenv("ANTHROPIC_API_KEY");
         if ("claude".equalsIgnoreCase(provider) && key != null && !key.isBlank()) {
             log.info("Phrasing with {} (placeholders only; template fallback)", model);

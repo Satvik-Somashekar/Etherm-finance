@@ -16,9 +16,10 @@ etherm:
     ingestion: ${ETHERM_INGESTION_URL:http://localhost:8081}
     retrieval: ${ETHERM_RETRIEVAL_URL:http://localhost:8083}
   phrasing:
-    # template | claude (claude needs ANTHROPIC_API_KEY; numbers always come from Java)
+    # template | claude | gemini (needs ANTHROPIC_API_KEY or GEMINI_API_KEY; numbers always come from Java)
     provider: ${ETHERM_PHRASING:template}
     model: claude-opus-5-5
+    gemini-model: ${ETHERM_GEMINI_MODEL:gemini-3.5-flash}
   query:
     # Fix "today" for relative periods such as "last quarter"; empty means the real date.
     as-of: ${ETHERM_AS_OF:}
