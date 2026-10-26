@@ -16,7 +16,10 @@ Usage:
   python3 evaluation/baseline_llm.py                    # full run
 
 The raw data for a user goes in a cached system block, so each extra question is cheap.
-Requires: pip install anthropic
+Providers: --provider anthropic (default, needs `pip install anthropic` and ANTHROPIC_API_KEY) or
+--provider gemini (standard library only, needs GEMINI_API_KEY from Google AI Studio and
+--model set to a model name your key can use, for example one listed in AI Studio). Gemini free
+tiers are rate limited, so use --pause to space calls out.
 """
 
 import argparse
@@ -24,6 +27,9 @@ import json
 import os
 import re
 import sys
+import time
+import urllib.error
+import urllib.request
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -55,6 +61,30 @@ def parse_answer(text):
         return Decimal(found[-1].replace(",", "").rstrip("."))
     except InvalidOperation:
         return None
+
+
+def ask_gemini(model, system_text, question, retries=5):
+    """One Gemini call over REST. The key comes from GEMINI_API_KEY only."""
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    body = json.dumps({
+        "systemInstruction": {"parts": [{"text": system_text}]},
+        "contents": [{"role": "user", "parts": [{"text": question}]}],
+        "generationConfig": {"maxOutputTokens": 2000, "temperature": 0},
+    }).encode()
+    for attempt in range(retries):
+        req = urllib.request.Request(url, data=body, headers={
+            "content-type": "application/json", "x-goog-api-key": os.environ["GEMINI_API_KEY"]})
+        try:
+            with urllib.request.urlopen(req, timeout=180) as resp:
+                data = json.load(resp)
+            parts = (data.get("candidates") or [{}])[0].get("content", {}).get("parts", [])
+            return "".join(p.get("text", "") for p in parts)
+        except urllib.error.HTTPError as e:
+            if e.code in (429, 500, 503) and attempt < retries - 1:
+                time.sleep(2 ** attempt * 5)
+                continue
+            sys.exit(f"Gemini API error {e.code}: {e.read().decode()[:300]}")
+    return ""
 
 
 def single_total_questions(as_of, users):
@@ -91,12 +121,18 @@ def main():
     ap.add_argument("--as-of", default="2026-10-25")
     ap.add_argument("--data", default=str(ROOT / "data" / "synthetic"))
     ap.add_argument("--out", default=str(ROOT / "evaluation" / "results"))
-    ap.add_argument("--model", default=DEFAULT_MODEL)
+    ap.add_argument("--provider", choices=["anthropic", "gemini"], default="anthropic")
+    ap.add_argument("--model", default=None, help="model name; required for gemini")
+    ap.add_argument("--pause", type=float, default=0, help="seconds to wait between calls")
     ap.add_argument("--users", type=int, default=0, help="only the first N users (0 = all)")
     ap.add_argument("--limit", type=int, default=0, help="at most N questions per user (0 = all)")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
+    if args.model is None:
+        if args.provider == "gemini":
+            sys.exit("--model is required with --provider gemini (a model name your key can use)")
+        args.model = DEFAULT_MODEL
     as_of = date.fromisoformat(args.as_of)
     paths = sorted(Path(args.data).glob("*.json"))
     if args.users:
@@ -117,19 +153,27 @@ def main():
         print(f"  {uid}: {len(text):,} chars of raw records (about {len(text) // 3:,} tokens)")
     if args.dry_run:
         return
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        sys.exit("ANTHROPIC_API_KEY is not set in the environment")
+    key_var = "GEMINI_API_KEY" if args.provider == "gemini" else "ANTHROPIC_API_KEY"
+    if not os.environ.get(key_var):
+        sys.exit(f"{key_var} is not set in the environment")
 
-    import anthropic
-    client = anthropic.Anthropic()
+    client = None
+    if args.provider == "anthropic":
+        import anthropic
+        client = anthropic.Anthropic()
     rows = []
     for uid, items in per_user.items():
-        system = [{"type": "text", "text": SYSTEM.format(today=as_of.isoformat(), records=raw[uid]),
-                   "cache_control": {"type": "ephemeral"}}]
+        system_text = SYSTEM.format(today=as_of.isoformat(), records=raw[uid])
+        system = [{"type": "text", "text": system_text, "cache_control": {"type": "ephemeral"}}]
         for qset, user, q, exp in items:
-            msg = client.messages.create(model=args.model, max_tokens=2000, system=system,
-                                         messages=[{"role": "user", "content": q}])
-            text = "".join(b.text for b in msg.content if b.type == "text")
+            if args.provider == "gemini":
+                text = ask_gemini(args.model, system_text, q)
+            else:
+                msg = client.messages.create(model=args.model, max_tokens=2000, system=system,
+                                             messages=[{"role": "user", "content": q}])
+                text = "".join(b.text for b in msg.content if b.type == "text")
+            if args.pause:
+                time.sleep(args.pause)
             got = parse_answer(text)
             rows.append({"set": qset, "user": uid, "question": q, "expected": str(exp),
                          "got": None if got is None else str(got), "grade": grade(exp, got),
@@ -153,7 +197,7 @@ def report(rows, args):
     lines = [
         "# Plain-LLM baseline",
         "",
-        f"Model `{args.model}`, raw records in context, no tools, no consent bounding. "
+        f"Provider {args.provider}, model `{args.model}`, raw records in context, no tools, no consent bounding. "
         f"{n} single-total questions over {len({r['user'] for r in rows})} customers, as of {args.as_of}.",
         "",
         "| Outcome | Count |", "|---|---|",
