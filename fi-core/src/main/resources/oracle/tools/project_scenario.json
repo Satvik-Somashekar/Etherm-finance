@@ -1,0 +1,15 @@
+{
+  "name": "project_scenario",
+  "description": "Project a figure forward under stated assumptions (growth rate, monthly saving, horizon). Every assumption is returned and marked adjustable; projections are illustrations, not forecasts.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "basis": {"enum": ["NET_WORTH","SAVINGS","ACCOUNT","INSTRUMENT"]},
+      "accountId": {"type": "string"},
+      "monthlyContribution": {"type": "number", "minimum": 0},
+      "annualRatePercent": {"type": "number", "minimum": -50, "maximum": 50},
+      "months": {"type": "integer", "minimum": 1, "maximum": 600}
+    },
+    "required": ["basis", "months"]
+  }
+}

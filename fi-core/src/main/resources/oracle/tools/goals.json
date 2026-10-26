@@ -1,0 +1,12 @@
+{
+  "name": "goals",
+  "description": "Create, list or check progress on the customer's goals. Progress is computed from the linked accounts' consented balances.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "action": {"enum": ["LIST","CREATE","PROGRESS","DELETE"]},
+      "goal": {"type": "object", "properties": {"goalId": {"type": "string"}, "name": {"type": "string", "maxLength": 80}, "targetAmount": {"type": "number", "exclusiveMinimum": 0}, "targetDate": {"type": "string", "format": "date"}, "accountIds": {"type": "array", "items": {"type": "string"}}}}
+    },
+    "required": ["action"]
+  }
+}
