@@ -149,7 +149,7 @@ answered as an income question) is left in to show what the keyword parser still
 
 | Route | Screen | Data |
 | --- | --- | --- |
-| `/accounts` | Linked Accounts | Live: accounts, balances and sync time come from the services. Linking a provider creates and approves a consent; removing one revokes it |
+| `/accounts` | Linked Accounts | Live: accounts, balances and sync time come from the services. Linking a provider creates and approves a consent; removing one revokes it. The Export card downloads transactions and a monthly report as CSV |
 | `/oracle` | AI Oracle | Live: questions go to `POST /api/query`, and answers show figures, a breakdown and record citations |
 | `/consent` | Consent & Security | Live consent ledger for the signed-in customer |
 | `/` | Dashboard | Live: net worth, allocation, a 12-month history rebuilt from transactions at today's prices (market moves are not reflected), recent activity, and three insights answered by the same pipeline as the Oracle (`GET /api/customers/{id}/overview`) |
@@ -157,6 +157,17 @@ answered as an income question) is left in to show what the keyword parser still
 Sign-in is a demo picker for the five synthetic customers (`src/lib/session.ts`); no password is
 checked and the services still accept any customer id, so this is not access control yet. Each
 user's session reloads their own accounts, Dashboard and Oracle data.
+
+### CSV exports
+
+`GET /api/customers/{id}/export/transactions.csv` (optional `from`, `to`, `category`, `fiType`) returns
+every consented transaction, one row each, oldest first. `GET /api/customers/{id}/export/report.csv`
+(optional `from`, `to`) returns one row per month with income, spending, saved, savings rate and
+spending by category, plus a total row. Both read only what the customer's active consents allow, and the
+report uses the same compute layer as the Oracle, so its figures match an Oracle answer for the same
+period. Text taken from records is defused against spreadsheet formulas by a leading apostrophe.
+Checked against `evaluation/evaluate.py`'s independent ground truth for all five customers and 12
+months. Exports are off in demo mode, which has no backend.
 
 ### Demo mode (no backend)
 

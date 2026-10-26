@@ -41,6 +41,38 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T
 }
 
+export type ExportKind = 'transactions' | 'report'
+
+/**
+ * Downloads a CSV the Java services build from the customer's consented records. The optional
+ * range is yyyy-MM-dd. Not available in the public demo, which has no backend.
+ */
+export async function downloadExport(kind: ExportKind, range: { from?: string; to?: string } = {}): Promise<void> {
+  if (DEMO) throw new ApiError(503, 'Exports need the live services, which the public demo does not run.')
+  const query = new URLSearchParams()
+  if (range.from) query.set('from', range.from)
+  if (range.to) query.set('to', range.to)
+  const path = `/svc/rag/api/customers/${encodeURIComponent(currentCustomerId())}/export/${kind}.csv`
+  const response = await fetch(query.size ? `${path}?${query}` : path)
+  if (!response.ok) {
+    let detail = response.statusText
+    try {
+      detail = ((await response.json()) as { detail?: string }).detail ?? detail
+    } catch {
+      // Body was not JSON; keep the status text.
+    }
+    throw new ApiError(response.status, detail)
+  }
+  const url = URL.createObjectURL(await response.blob())
+  const link = document.createElement('a')
+  link.href = url
+  link.download = kind === 'report' ? 'etherm-report.csv' : 'etherm-transactions.csv'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
 // ------------------------------------------------------------------ backend shapes
 
 interface BackendConsent {
