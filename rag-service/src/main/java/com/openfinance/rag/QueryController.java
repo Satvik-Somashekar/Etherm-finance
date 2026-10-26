@@ -20,6 +20,8 @@ import org.springframework.web.client.HttpStatusCodeException;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.util.EnumSet;
+import java.util.Set;
 import java.time.format.DateTimeParseException;
 
 @RestController
@@ -46,15 +48,20 @@ public class QueryController {
         return overviews.overview(customerId);
     }
 
-    /** Consent-bounded transactions as CSV. Optional filters: from, to (yyyy-MM-dd), category, fiType. */
+    /** Consent-bounded transactions as CSV. Optional filters: from, to (yyyy-MM-dd), category (comma-separated), fiType. */
     @GetMapping("/customers/{customerId}/export/transactions.csv")
     public ResponseEntity<String> transactionsCsv(@PathVariable String customerId,
                                                   @RequestParam(required = false) String from,
                                                   @RequestParam(required = false) String to,
                                                   @RequestParam(required = false) String category,
                                                   @RequestParam(required = false) String fiType) {
-        String csv = exports.transactionsCsv(customerId, date(from), date(to),
-                category == null ? null : Category.valueOf(category.toUpperCase()),
+        Set<Category> categories = EnumSet.noneOf(Category.class);
+        if (category != null && !category.isBlank()) {
+            for (String name : category.split(",")) {
+                categories.add(Category.valueOf(name.trim().toUpperCase()));
+            }
+        }
+        String csv = exports.transactionsCsv(customerId, date(from), date(to), categories,
                 fiType == null ? null : FiType.valueOf(fiType.toUpperCase()));
         return csv(csv, "etherm-transactions.csv");
     }

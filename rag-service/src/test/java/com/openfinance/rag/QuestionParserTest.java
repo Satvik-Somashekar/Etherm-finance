@@ -116,4 +116,29 @@ class QuestionParserTest {
     private static DateRange range(int y1, int m1, int d1, int y2, int m2, int d2) {
         return new DateRange(LocalDate.of(y1, m1, d1), LocalDate.of(y2, m2, d2), "");
     }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+            "Export my transactions|EXPORT_TRANSACTIONS",
+            "Download my transactions for last quarter as CSV|EXPORT_TRANSACTIONS",
+            "Can I get a spreadsheet of my grocery spending in March 2026|EXPORT_TRANSACTIONS",
+            "Generate a monthly report|EXPORT_REPORT",
+            "Create a report of my spending for FY 2025-26|EXPORT_REPORT",
+            "Download a summary of this year|EXPORT_REPORT",
+            "Give me my bank statement|EXPORT_TRANSACTIONS",
+            "How much did I save last month?|SAVINGS_RATE",
+            "What was my spending report like?|SPEND_TOTAL",
+    })
+    void exportRequestsAreRecognised(String question, Intent expected) {
+        assertThat(parse(question).intent()).isEqualTo(expected);
+    }
+
+    @Test
+    void exportKeepsItsPeriodAndCategoriesButNeverComparesPeriods() {
+        QueryPlan plan = parse("Export my grocery and salary transactions for last quarter, change since before");
+        assertThat(plan.intent()).isEqualTo(Intent.EXPORT_TRANSACTIONS);
+        assertThat(plan.categories()).containsExactlyInAnyOrder(Category.GROCERIES, Category.SALARY);
+        assertThat(plan.period().from()).isEqualTo(LocalDate.of(2026, 7, 1));
+        assertThat(plan.compare()).isFalse();
+    }
 }

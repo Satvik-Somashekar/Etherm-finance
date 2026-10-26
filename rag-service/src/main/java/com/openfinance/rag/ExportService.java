@@ -43,11 +43,11 @@ public class ExportService {
     }
 
     /** One row per transaction, oldest first. Every filter is optional. */
-    public String transactionsCsv(String customerId, LocalDate from, LocalDate to, Category category, FiType fiType) {
+    public String transactionsCsv(String customerId, LocalDate from, LocalDate to, Set<Category> categories, FiType fiType) {
         List<FinancialRecord> records = transactions(customerId).stream()
                 .filter(r -> from == null || !r.date().isBefore(from))
                 .filter(r -> to == null || !r.date().isAfter(to))
-                .filter(r -> category == null || r.category() == category)
+                .filter(r -> categories == null || categories.isEmpty() || categories.contains(r.category()))
                 .filter(r -> fiType == null || r.fiType() == fiType)
                 .sorted(Comparator.comparing(FinancialRecord::date).thenComparing(FinancialRecord::recordId))
                 .toList();

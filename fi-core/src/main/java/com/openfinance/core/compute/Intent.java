@@ -28,6 +28,10 @@ public enum Intent {
     TOP_MERCHANTS,
     /** Spending month by month, with the monthly average. */
     SPEND_TREND,
+    /** The customer asked for their transactions as a file; the answer carries a download. */
+    EXPORT_TRANSACTIONS,
+    /** The customer asked for a monthly report as a file; the answer carries a download. */
+    EXPORT_REPORT,
     /** The question did not match anything the compute layer can answer. */
     UNSUPPORTED
 }

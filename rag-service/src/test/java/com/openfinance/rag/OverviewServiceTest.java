@@ -65,6 +65,6 @@ class OverviewServiceTest {
                 : List.of(new QueryResponse.Citation("A:T1", "A", "ETHERM-BANK-FIP", FiType.DEPOSIT, LocalDate.now(),
                         BigDecimal.TEN, "test", null));
         return new QueryResponse(question, "answer", "template", null, null, List.of(), List.of(), citations,
-                new QueryResponse.Grounding(CONSENTS, 9, 9, citations.size(), LocalDate.of(2026, 10, 25)));
+                new QueryResponse.Grounding(CONSENTS, 9, 9, citations.size(), LocalDate.of(2026, 10, 25)), null);
     }
 }

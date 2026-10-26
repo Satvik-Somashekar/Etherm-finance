@@ -23,7 +23,18 @@ public record QueryResponse(
         List<Figure> figures,
         List<BreakdownItem> breakdown,
         List<Citation> citations,
-        Grounding grounding) {
+        Grounding grounding,
+        Export export) {
+
+    /**
+     * Present when the question asked for a file. The client downloads it from the customer's export
+     * endpoint with these parameters; the file is built from consented records, like the answer.
+     *
+     * @param kind       {@code transactions} or {@code report}
+     * @param categories transaction categories to keep; empty means all
+     */
+    public record Export(String kind, LocalDate from, LocalDate to, List<String> categories) {
+    }
 
     public record Period(LocalDate from, LocalDate to, String label) {
     }

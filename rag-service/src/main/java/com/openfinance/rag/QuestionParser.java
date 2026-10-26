@@ -57,7 +57,7 @@ public class QuestionParser {
         DateRange period = period(q, asOf);
         if (period != null && isFlow(plan.intent())) {
             plan = plan.withPeriod(period);
-            if (has(q, "compar", " vs ", "versus", "increase", "decrease", "change", " grew", " drop", " than ", "went up", "went down")) {
+            if (plan.intent() != Intent.EXPORT_TRANSACTIONS && plan.intent() != Intent.EXPORT_REPORT && has(q, "compar", " vs ", "versus", "increase", "decrease", "change", " grew", " drop", " than ", "went up", "went down")) {
                 plan = plan.withCompare(true);
             }
         }
@@ -71,6 +71,10 @@ public class QuestionParser {
         if (has(q, " should i ", " should we ", " good time ", " will ", " going to ", " predict", " forecast",
                 " recommend", " advice", " advise", " best ")) {
             return QueryPlan.of(Intent.UNSUPPORTED);
+        }
+        QueryPlan export = export(q);
+        if (export != null) {
+            return export;
         }
         if (has(q, "savings rate", "saving rate", "how much did i save", "how much do i save", "how much have i saved",
                 "how much i saved", "am i saving", "did i save", " i saved ", "left over", "leftover", "left after")
@@ -151,10 +155,32 @@ public class QuestionParser {
         return QueryPlan.of(Intent.UNSUPPORTED);
     }
 
+    /** A request for a file: "export my transactions", "download a report", "give me a csv for March". */
+    private QueryPlan export(String q) {
+        boolean asks = has(q, "export", "download", " csv", "spreadsheet", "excel", "as a file")
+                || (has(q, "report", "statement") && has(q, "generate", "create", "make", "give me", "prepare", "produce", "need", "want", "send"));
+        if (!asks) {
+            return null;
+        }
+        if (has(q, "report", "summary")) {
+            return QueryPlan.of(Intent.EXPORT_REPORT);
+        }
+        Set<Category> cats = EnumSet.noneOf(Category.class);
+        CATEGORY_WORDS.forEach((word, cat) -> {
+            if (q.contains(word)) {
+                cats.add(cat);
+            }
+        });
+        if (has(q, "salary")) {
+            cats.add(Category.SALARY);
+        }
+        return QueryPlan.of(Intent.EXPORT_TRANSACTIONS).withCategories(cats);
+    }
+
     private static boolean isFlow(Intent i) {
         return switch (i) {
             case SPEND_TOTAL, SPEND_CATEGORY, TOP_EXPENSES, INCOME, PREMIUMS_PAID, MF_INVESTED, EPF_CONTRIBUTIONS,
-                 SAVINGS_RATE, TOP_MERCHANTS, SPEND_TREND -> true;
+                 SAVINGS_RATE, TOP_MERCHANTS, SPEND_TREND, EXPORT_TRANSACTIONS, EXPORT_REPORT -> true;
             default -> false;
         };
     }

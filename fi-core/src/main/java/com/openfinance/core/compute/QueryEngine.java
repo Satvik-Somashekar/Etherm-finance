@@ -62,6 +62,8 @@ public class QueryEngine {
                     ? "Net worth" : "Current value", r -> accountLabel(r));
             case HOLDINGS -> snapshot(plan, records, "Holdings value", FinancialRecord::description);
             case INSURANCE_COVER -> snapshot(plan, records, "Total sum assured", r -> r.attributes().getOrDefault("policyName", r.description()));
+            case EXPORT_TRANSACTIONS -> exportTransactions(plan, records, retrieved);
+            case EXPORT_REPORT -> exportReport(plan, records, retrieved);
             case UNSUPPORTED -> new ComputedAnswer(plan, List.of(), List.of(), List.of(), 0);
         };
     }
@@ -94,6 +96,8 @@ public class QueryEngine {
                     : plan.fiTypes(), Set.of(RecordKind.HOLDING), Set.of(), null, null, null);
             case INSURANCE_COVER -> new RecordFilter(Set.of(FiType.INSURANCE_POLICIES), Set.of(RecordKind.POLICY),
                     Set.of(), null, null, null);
+            case EXPORT_TRANSACTIONS -> new RecordFilter(Set.of(), tx, plan.categories(), null, from, to);
+            case EXPORT_REPORT -> new RecordFilter(Set.of(), tx, Set.of(), null, from, to);
             // Matches nothing, so an unsupported question never retrieves or cites data.
             case UNSUPPORTED -> new RecordFilter(Set.of(), Set.of(RecordKind.TRANSACTION), Set.of(), null,
                     LocalDate.MAX, LocalDate.MIN);
@@ -110,6 +114,22 @@ public class QueryEngine {
         List<FinancialRecord> cited = new ArrayList<>(records);
         addComparison(plan, records, retrieved, figures, cited);
         return new ComputedAnswer(plan, figures, groupSum(records, groupBy), cited, retrieved.size());
+    }
+
+    /** What a transactions export will contain: how many rows. The file itself is built by the export endpoint. */
+    private ComputedAnswer exportTransactions(QueryPlan plan, List<FinancialRecord> records, List<FinancialRecord> retrieved) {
+        List<Figure> figures = List.of(
+                new Figure("count", "Transactions in the file", BigDecimal.valueOf(records.size()), Unit.COUNT, ids(records)));
+        return new ComputedAnswer(plan, figures, List.of(), records, retrieved.size());
+    }
+
+    /** What a monthly report will cover: the number of months and of transactions behind it. */
+    private ComputedAnswer exportReport(QueryPlan plan, List<FinancialRecord> records, List<FinancialRecord> retrieved) {
+        long months = records.stream().map(r -> YearMonth.from(r.date())).distinct().count();
+        List<Figure> figures = List.of(
+                new Figure("months", "Months in the report", BigDecimal.valueOf(months), Unit.COUNT, ids(records)),
+                new Figure("count", "Transactions behind the report", BigDecimal.valueOf(records.size()), Unit.COUNT, ids(records)));
+        return new ComputedAnswer(plan, figures, List.of(), records, retrieved.size());
     }
 
     private ComputedAnswer epf(QueryPlan plan, List<FinancialRecord> records, List<FinancialRecord> retrieved) {

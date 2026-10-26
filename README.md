@@ -167,7 +167,7 @@ spending by category, plus a total row. Both read only what the customer's activ
 report uses the same compute layer as the Oracle, so its figures match an Oracle answer for the same
 period. Text taken from records is defused against spreadsheet formulas by a leading apostrophe.
 Checked against `evaluation/evaluate.py`'s independent ground truth for all five customers and 12
-months. Exports are off in demo mode, which has no backend.
+months. The Oracle can also produce them: "Export my grocery transactions for last quarter" or "Generate a monthly report" returns an answer with the row count (computed in Java) and a Download button that fetches the same file. Exports are off in demo mode, which has no backend.
 
 ### Demo mode (no backend)
 
