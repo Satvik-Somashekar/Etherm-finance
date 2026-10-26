@@ -69,7 +69,7 @@ def ask_gemini(model, system_text, question, retries=5):
     body = json.dumps({
         "systemInstruction": {"parts": [{"text": system_text}]},
         "contents": [{"role": "user", "parts": [{"text": question}]}],
-        "generationConfig": {"maxOutputTokens": 2000, "temperature": 0},
+        "generationConfig": {"maxOutputTokens": 8192, "temperature": 0},
     }).encode()
     for attempt in range(retries):
         req = urllib.request.Request(url, data=body, headers={
