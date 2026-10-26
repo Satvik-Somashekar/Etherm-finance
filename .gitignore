@@ -11,3 +11,4 @@ dist/
 
 # evaluation run output; REPORT.md and BASELINE.md are kept
 evaluation/results/results.json
+__pycache__/

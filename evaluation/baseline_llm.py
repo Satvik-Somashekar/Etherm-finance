@@ -1,0 +1,241 @@
+#!/usr/bin/env python3
+"""Plain-LLM baseline: the same questions, but the model gets the raw records and no tools.
+
+It answers numeric questions straight from the customer's raw FI JSON (the same files Etherm's
+ground truth is computed from), with no Java compute layer, no consent bounding and no citations
+check. Its final number is compared with the ground truth from evaluate.py. This tests the claim
+that taking the model out of the arithmetic makes the answers correct.
+
+Only questions with a single expected total are used (no comparisons, top-N, trends, savings
+rate), so scoring is unambiguous. Questions come from evaluate.py's dev and held-out sets.
+
+Usage:
+  export ANTHROPIC_API_KEY=...            # your own key, from the environment only
+  python3 evaluation/baseline_llm.py --dry-run          # counts and prompt size, no API calls
+  python3 evaluation/baseline_llm.py --users 1 --limit 20   # small trial first
+  python3 evaluation/baseline_llm.py                    # full run
+
+The raw data for a user goes in a cached system block, so each extra question is cheap.
+Providers: --provider anthropic (default, needs `pip install anthropic` and ANTHROPIC_API_KEY) or
+--provider gemini (standard library only, needs GEMINI_API_KEY from Google AI Studio and
+--model set to a model name your key can use, for example one listed in AI Studio). Gemini free
+tiers are rate limited, so use --pause to space calls out.
+"""
+
+import argparse
+import json
+import os
+import re
+import sys
+import time
+import urllib.error
+import urllib.request
+from datetime import date
+from decimal import Decimal, InvalidOperation
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import evaluate as ev  # noqa: E402
+
+ROOT = ev.ROOT
+DEFAULT_MODEL = os.environ.get("ETHERM_BASELINE_MODEL", "claude-opus-5-5")
+
+SYSTEM = (
+    "You answer questions about one customer's finances using only the raw Account Aggregator "
+    "records below. Work out the answer yourself from the records. Amounts are in Indian rupees. "
+    "Today's date is {today}. Give a short explanation, then finish with a final line exactly of "
+    "the form `ANSWER: <number>` with the single number that answers the question (plain digits, "
+    "optional decimals, no commas or symbols). If the records cannot answer it, finish with "
+    "`ANSWER: none`.\n\nRECORDS (JSON):\n{records}"
+)
+
+# Etherm's definitions, written out. With --definitions these go in the prompt, so a miss can no
+# longer be blamed on the model choosing its own meaning of "spending" or "income".
+DEFINITIONS = (
+    "\n\nDEFINITIONS (follow these exactly):\n"
+    "- Spending means debits from the deposit account other than SIP debits (narration starting "
+    "ACH/SIP/) and share-purchase debits (narration starting NEFT/DEMAT/). Insurance premium debits "
+    "(ACH/PREMIUM/), rent, ATM withdrawals and all other debits count as spending.\n"
+    "- Income means salary credits only (narration containing SALARY). Interest and other credits "
+    "are not income.\n"
+    "- Use each transaction's valueDate for deposit accounts, transactionDate for mutual funds and "
+    "txnDate for EPF and insurance. Date ranges include both end dates.\n"
+    "- Insurance cost means premiums paid on insurance policies. Mutual fund investment means mutual "
+    "fund BUY transactions. EPF contributions are CONTRIBUTION transactions.\n"
+    "- A financial year runs 1 April to 31 March; 'last quarter' is the previous calendar quarter."
+)
+
+ANSWER = re.compile(r"ANSWER:\s*([-\d.,]+|none)", re.IGNORECASE)
+
+
+def parse_answer(text):
+    """The number after the last ANSWER: line, or None (declined or unparseable)."""
+    found = ANSWER.findall(text or "")
+    if not found or found[-1].lower() == "none":
+        return None
+    try:
+        return Decimal(found[-1].replace(",", "").rstrip("."))
+    except InvalidOperation:
+        return None
+
+
+def ask_gemini(model, system_text, question, retries=5):
+    """One Gemini call over REST. The key comes from GEMINI_API_KEY only."""
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    body = json.dumps({
+        "systemInstruction": {"parts": [{"text": system_text}]},
+        "contents": [{"role": "user", "parts": [{"text": question}]}],
+        "generationConfig": {"maxOutputTokens": 8192, "temperature": 0},
+    }).encode()
+    for attempt in range(retries):
+        req = urllib.request.Request(url, data=body, headers={
+            "content-type": "application/json", "x-goog-api-key": os.environ["GEMINI_API_KEY"]})
+        try:
+            with urllib.request.urlopen(req, timeout=180) as resp:
+                data = json.load(resp)
+            parts = (data.get("candidates") or [{}])[0].get("content", {}).get("parts", [])
+            return "".join(p.get("text", "") for p in parts)
+        except urllib.error.HTTPError as e:
+            if e.code in (429, 500, 503) and attempt < retries - 1:
+                time.sleep(2 ** attempt * 5)
+                continue
+            sys.exit(f"Gemini API error {e.code}: {e.read().decode()[:300]}")
+    return ""
+
+
+def single_total_questions(as_of, users):
+    """(set, user, question, expected total) for every question with one unambiguous total."""
+    out = []
+    for qset, (flow_qs, snapshot_qs, _oos) in ev.SETS.items():
+        for user in users:
+            for phrase, (frm, to) in ev.periods(as_of).items():
+                for template, _intent, kinds, extra in flow_qs:
+                    if extra:
+                        continue
+                    exp = ev.expected_flow(user, kinds, frm, to)
+                    out.append((qset, user, template.format(p=phrase), exp["total"]))
+            for q, intent, select in snapshot_qs:
+                if intent == "HOLDINGS":
+                    continue
+                chosen = [s for s in user.snapshots if select(s)]
+                out.append((qset, user, q, sum((s.value for s in chosen), Decimal(0))))
+    return out
+
+
+def grade(expected, got):
+    if got is None:
+        return "declined"
+    if got == expected:
+        return "exact"
+    if abs(got - expected) <= Decimal("1"):
+        return "rounded"
+    return "wrong"
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--as-of", default="2026-10-25")
+    ap.add_argument("--data", default=str(ROOT / "data" / "synthetic"))
+    ap.add_argument("--out", default=str(ROOT / "evaluation" / "results"))
+    ap.add_argument("--provider", choices=["anthropic", "gemini"], default="anthropic")
+    ap.add_argument("--model", default=None, help="model name; required for gemini")
+    ap.add_argument("--pause", type=float, default=0, help="seconds to wait between calls")
+    ap.add_argument("--users", type=int, default=0, help="only the first N users (0 = all)")
+    ap.add_argument("--limit", type=int, default=0, help="at most N questions per user (0 = all)")
+    ap.add_argument("--definitions", action="store_true",
+                    help="put Etherm's definitions of spending and income in the prompt")
+    ap.add_argument("--dry-run", action="store_true")
+    args = ap.parse_args()
+
+    if args.model is None:
+        if args.provider == "gemini":
+            sys.exit("--model is required with --provider gemini (a model name your key can use)")
+        args.model = DEFAULT_MODEL
+    as_of = date.fromisoformat(args.as_of)
+    paths = sorted(Path(args.data).glob("*.json"))
+    if args.users:
+        paths = paths[: args.users]
+    users = [ev.load_user(p) for p in paths]
+    raw = {u.customer_id: p.read_text() for u, p in zip(users, paths)}
+    questions = single_total_questions(as_of, users)
+
+    per_user = {}
+    for qset, user, q, exp in questions:
+        per_user.setdefault(user.customer_id, []).append((qset, user, q, exp))
+    if args.limit:
+        per_user = {k: v[:: max(1, len(v) // args.limit)][: args.limit] for k, v in per_user.items()}
+
+    total = sum(len(v) for v in per_user.values())
+    print(f"{len(users)} users, {total} questions, model {args.model}")
+    for uid, text in raw.items():
+        print(f"  {uid}: {len(text):,} chars of raw records (about {len(text) // 3:,} tokens)")
+    if args.dry_run:
+        return
+    key_var = "GEMINI_API_KEY" if args.provider == "gemini" else "ANTHROPIC_API_KEY"
+    if not os.environ.get(key_var):
+        sys.exit(f"{key_var} is not set in the environment")
+
+    client = None
+    if args.provider == "anthropic":
+        import anthropic
+        client = anthropic.Anthropic()
+    rows = []
+    for uid, items in per_user.items():
+        system_text = SYSTEM.format(today=as_of.isoformat(), records=raw[uid])
+        if args.definitions:
+            system_text += DEFINITIONS
+        system = [{"type": "text", "text": system_text, "cache_control": {"type": "ephemeral"}}]
+        for qset, user, q, exp in items:
+            if args.provider == "gemini":
+                text = ask_gemini(args.model, system_text, q)
+            else:
+                msg = client.messages.create(model=args.model, max_tokens=2000, system=system,
+                                             messages=[{"role": "user", "content": q}])
+                text = "".join(b.text for b in msg.content if b.type == "text")
+            if args.pause:
+                time.sleep(args.pause)
+            got = parse_answer(text)
+            rows.append({"set": qset, "user": uid, "question": q, "expected": str(exp),
+                         "got": None if got is None else str(got), "grade": grade(exp, got),
+                         "answer": text[-400:]})
+            print(f"{rows[-1]['grade']:9} {uid} {q}", flush=True)
+
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    tag = "_defs" if args.definitions else ""
+    (out / f"baseline_llm{tag}.json").write_text(json.dumps(rows, indent=1))
+    (out / f"BASELINE_LLM{tag}.md").write_text(report(rows, args))
+    print((out / f"BASELINE_LLM{tag}.md").read_text())
+
+
+def report(rows, args):
+    n = len(rows)
+
+    def pct(k):
+        c = sum(r["grade"] == k for r in rows)
+        return f"{c} / {n} ({100 * c / n:.1f}%)"
+
+    lines = [
+        "# Plain-LLM baseline",
+        "",
+        f"Provider {args.provider}, model `{args.model}`, "
+        f"{'with' if args.definitions else 'without'} Etherm's definitions in the prompt, raw records in context, no tools, no consent bounding. "
+        f"{n} single-total questions over {len({r['user'] for r in rows})} customers, as of {args.as_of}.",
+        "",
+        "| Outcome | Count |", "|---|---|",
+        f"| Exact to the paisa | {pct('exact')} |",
+        f"| Within Rs 1 (rounded) | {pct('rounded')} |",
+        f"| Wrong | {pct('wrong')} |",
+        f"| Declined or unparseable | {pct('declined')} |",
+        "",
+        "Etherm on the same questions is exact on every one (see REPORT.md).",
+        "",
+        "Limits: the baseline is told nothing about Etherm's definitions (for example that SIP and "
+        "share-purchase debits are not spending), so some misses are definition differences, not "
+        "arithmetic. Read `baseline_llm.json` to separate the two before quoting a number.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+if __name__ == "__main__":
+    main()
