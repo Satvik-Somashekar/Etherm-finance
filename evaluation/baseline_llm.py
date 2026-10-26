@@ -49,6 +49,22 @@ SYSTEM = (
     "`ANSWER: none`.\n\nRECORDS (JSON):\n{records}"
 )
 
+# Etherm's definitions, written out. With --definitions these go in the prompt, so a miss can no
+# longer be blamed on the model choosing its own meaning of "spending" or "income".
+DEFINITIONS = (
+    "\n\nDEFINITIONS (follow these exactly):\n"
+    "- Spending means debits from the deposit account other than SIP debits (narration starting "
+    "ACH/SIP/) and share-purchase debits (narration starting NEFT/DEMAT/). Insurance premium debits "
+    "(ACH/PREMIUM/), rent, ATM withdrawals and all other debits count as spending.\n"
+    "- Income means salary credits only (narration containing SALARY). Interest and other credits "
+    "are not income.\n"
+    "- Use each transaction's valueDate for deposit accounts, transactionDate for mutual funds and "
+    "txnDate for EPF and insurance. Date ranges include both end dates.\n"
+    "- Insurance cost means premiums paid on insurance policies. Mutual fund investment means mutual "
+    "fund BUY transactions. EPF contributions are CONTRIBUTION transactions.\n"
+    "- A financial year runs 1 April to 31 March; 'last quarter' is the previous calendar quarter."
+)
+
 ANSWER = re.compile(r"ANSWER:\s*([-\d.,]+|none)", re.IGNORECASE)
 
 
@@ -126,6 +142,8 @@ def main():
     ap.add_argument("--pause", type=float, default=0, help="seconds to wait between calls")
     ap.add_argument("--users", type=int, default=0, help="only the first N users (0 = all)")
     ap.add_argument("--limit", type=int, default=0, help="at most N questions per user (0 = all)")
+    ap.add_argument("--definitions", action="store_true",
+                    help="put Etherm's definitions of spending and income in the prompt")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
@@ -164,6 +182,8 @@ def main():
     rows = []
     for uid, items in per_user.items():
         system_text = SYSTEM.format(today=as_of.isoformat(), records=raw[uid])
+        if args.definitions:
+            system_text += DEFINITIONS
         system = [{"type": "text", "text": system_text, "cache_control": {"type": "ephemeral"}}]
         for qset, user, q, exp in items:
             if args.provider == "gemini":
@@ -182,9 +202,10 @@ def main():
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    (out / "baseline_llm.json").write_text(json.dumps(rows, indent=1))
-    (out / "BASELINE_LLM.md").write_text(report(rows, args))
-    print((out / "BASELINE_LLM.md").read_text())
+    tag = "_defs" if args.definitions else ""
+    (out / f"baseline_llm{tag}.json").write_text(json.dumps(rows, indent=1))
+    (out / f"BASELINE_LLM{tag}.md").write_text(report(rows, args))
+    print((out / f"BASELINE_LLM{tag}.md").read_text())
 
 
 def report(rows, args):
@@ -197,7 +218,8 @@ def report(rows, args):
     lines = [
         "# Plain-LLM baseline",
         "",
-        f"Provider {args.provider}, model `{args.model}`, raw records in context, no tools, no consent bounding. "
+        f"Provider {args.provider}, model `{args.model}`, "
+        f"{'with' if args.definitions else 'without'} Etherm's definitions in the prompt, raw records in context, no tools, no consent bounding. "
         f"{n} single-total questions over {len({r['user'] for r in rows})} customers, as of {args.as_of}.",
         "",
         "| Outcome | Count |", "|---|---|",
