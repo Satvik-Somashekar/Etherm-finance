@@ -97,7 +97,9 @@ export function GroundedAnswer({ result }: { result: QueryResult }) {
           <p className="mt-3 text-label-sm leading-relaxed text-on-surface-variant opacity-70">
             Totals are computed in Java over the retrieved records, within {result.grounding.consentIds.length}{' '}
             active consent{result.grounding.consentIds.length === 1 ? '' : 's'}. Sentence written by{' '}
-            {result.phrasedBy === 'template' ? 'a template' : result.phrasedBy}, which never sees the numbers.
+            {result.phrasedBy.endsWith(' agent')
+              ? `${result.phrasedBy.replace(' agent', '')}, which chose what to look up. It wrote the explanation, and the application inserted every figure from these computations; replies with numbers of the model's own are rejected.`
+              : `${result.phrasedBy === 'template' ? 'a template' : result.phrasedBy}, which never sees the numbers.`}
           </p>
         </div>
       )}

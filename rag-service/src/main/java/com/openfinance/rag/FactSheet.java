@@ -19,6 +19,9 @@ public final class FactSheet {
     private final Map<String, String> values = new LinkedHashMap<>();
     private final Map<String, String> descriptions = new LinkedHashMap<>();
 
+    public FactSheet() {
+    }
+
     public static FactSheet of(ComputedAnswer answer) {
         FactSheet s = new FactSheet();
         for (Figure f : answer.figures()) {
@@ -35,6 +38,21 @@ public final class FactSheet {
             s.values.put("item" + (i + 1) + "_label", items.get(i).label());
         }
         return s;
+    }
+
+    /** Copies every entry of another sheet in under a prefix, so several answers can share one sheet ("c1_total"). */
+    public void addAll(String prefix, FactSheet other) {
+        other.values.forEach((k, v) -> values.put(prefix + k, v));
+        other.descriptions.forEach((k, v) -> descriptions.put(prefix + k, v));
+    }
+
+    public Map<String, String> values() {
+        return values;
+    }
+
+    /** A placeholder whose value is plain text (a period or item name), not a figure. */
+    public void putText(String key, String value, String description) {
+        put(key, value, description);
     }
 
     private void put(String key, String value, String description) {

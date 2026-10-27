@@ -46,6 +46,18 @@ public class PhrasingConfig {
         return template;
     }
 
+    /** The tool-calling model for free conversation; absent unless Gemini phrasing is on and its key is set. */
+    @Bean
+    ChatModel chatModel(@Value("${etherm.phrasing.provider:template}") String provider,
+                        @Value("${etherm.phrasing.gemini-model:gemini-3.5-flash}") String geminiModel) {
+        String geminiKey = System.getenv("GEMINI_API_KEY");
+        if ("gemini".equalsIgnoreCase(provider) && geminiKey != null && !geminiKey.isBlank()) {
+            log.info("Free chat with {} (tool-bound: figures come from Java lookups)", geminiModel);
+            return new GeminiChatModel(GeminiPhraser.DEFAULT_BASE_URL, geminiKey, geminiModel);
+        }
+        return null;
+    }
+
     /** Pins "today" for relative periods; leave unset to use the real date. */
     @Bean
     AsOf asOf(@Value("${etherm.query.as-of:}") String value) {
