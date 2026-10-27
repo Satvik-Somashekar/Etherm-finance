@@ -1,5 +1,6 @@
 package com.openfinance.rag;
 
+import com.openfinance.core.compute.AdviceDomain;
 import com.openfinance.core.compute.ComputedAnswer;
 import com.openfinance.core.compute.DateRange;
 import com.openfinance.core.compute.Intent;
@@ -46,11 +47,14 @@ public class QueryService {
         // Allow
         List<String> consentIds = consents(request);
         LocalDate today = asOf.get();
-        QueryPlan plan = withConversation(parser.parse(request.question(), today), request.history(), today);
+        Set<FiType> scope = request.scope() == null ? Set.of() : request.scope();
+        QueryPlan plan = withConversation(parser.parse(request.question(), today), request.history(), scope, today);
 
         // Scope: a Knowledge Base section only removes data from what the consents allow.
-        Set<FiType> scope = request.scope() == null ? Set.of() : request.scope();
         if (!scope.isEmpty()) {
+            if (plan.intent() == Intent.UNSUPPORTED) {
+                return sectionHelp(request.question(), plan, scope, consentIds, today);
+            }
             Set<FiType> usable = new java.util.HashSet<>(naturalTypes(plan));
             usable.retainAll(scope);
             if (usable.isEmpty()) {
@@ -85,8 +89,18 @@ public class QueryService {
      * A suggestion needs a topic and a period. A follow-up such as "how can I reduce it?" borrows both from the
      * most recent spending question in the conversation; with none, the last three full months are used.
      */
-    private QueryPlan withConversation(QueryPlan plan, List<String> history, LocalDate today) {
+    private QueryPlan withConversation(QueryPlan plan, List<String> history, Set<FiType> scope, LocalDate today) {
         if (plan.intent() != Intent.ADVICE) {
+            return plan;
+        }
+        // A question that names no area is about the section the customer is in, else about spending or everything.
+        boolean generic = "GENERIC_SPEND".equals(plan.subject()) || "GENERIC_PLAN".equals(plan.subject());
+        if (generic) {
+            AdviceDomain section = sectionDomain(scope);
+            plan = plan.withSubject(section != null ? (section == AdviceDomain.SPENDING ? null : section.name())
+                    : "GENERIC_PLAN".equals(plan.subject()) ? AdviceDomain.OVERALL.name() : null);
+        }
+        if (AdviceDomain.of(plan) != AdviceDomain.SPENDING) {
             return plan;
         }
         if (history != null) {
@@ -111,6 +125,20 @@ public class QueryService {
         return plan;
     }
 
+    /** The suggestion domain a single-section scope stands for; null when no one section is selected. */
+    private static AdviceDomain sectionDomain(Set<FiType> scope) {
+        if (scope.size() != 1) {
+            return null;
+        }
+        return switch (scope.iterator().next()) {
+            case DEPOSIT -> AdviceDomain.SPENDING;
+            case MUTUAL_FUNDS -> AdviceDomain.MUTUAL_FUNDS;
+            case EQUITIES -> AdviceDomain.EQUITIES;
+            case INSURANCE_POLICIES -> AdviceDomain.INSURANCE;
+            case EPF -> AdviceDomain.EPF;
+        };
+    }
+
     private static final Set<Intent> CONTEXT_INTENTS = EnumSet.of(Intent.SPEND_TOTAL, Intent.SPEND_CATEGORY,
             Intent.TOP_EXPENSES, Intent.SPEND_TREND, Intent.TOP_MERCHANTS, Intent.SAVINGS_RATE, Intent.ADVICE);
 
@@ -123,7 +151,7 @@ public class QueryService {
     /** Intents that read "everything" are limited to the section; the others already name their types. */
     private static QueryPlan narrow(QueryPlan plan, Set<FiType> usable) {
         return switch (plan.intent()) {
-            case BALANCE, HOLDINGS, EXPORT_TRANSACTIONS -> plan.withFiTypes(usable);
+            case BALANCE, HOLDINGS, EXPORT_TRANSACTIONS, ADVICE -> plan.withFiTypes(usable);
             default -> plan;
         };
     }
@@ -137,6 +165,29 @@ public class QueryService {
                 plan.period() == null ? null : new QueryResponse.Period(plan.period().from(), plan.period().to(), plan.period().label()),
                 List.of(), List.of(), List.of(), new QueryResponse.Grounding(consentIds, 0, 0, 0, today), null);
     }
+
+    /** Inside a section, a question it cannot answer gets that section's own help, not the general list. */
+    private QueryResponse sectionHelp(String question, QueryPlan plan, Set<FiType> scope, List<String> consentIds,
+                                      LocalDate today) {
+        String text = scope.size() == 1 ? HELP.get(scope.iterator().next())
+                : "I can only look at the sections you selected. Try a question about " + scope.stream()
+                .map(QueryService::sectionName).sorted().collect(Collectors.joining(" or ")) + ".";
+        return new QueryResponse(question, text, "template", Intent.UNSUPPORTED, null,
+                List.of(), List.of(), List.of(), new QueryResponse.Grounding(consentIds, 0, 0, 0, today), null);
+    }
+
+    private static final java.util.Map<FiType, String> HELP = java.util.Map.of(
+            FiType.DEPOSIT, "In Deposits & Cashflow I can answer questions about your spending and categories, largest expenses, "
+                    + "merchants, month-by-month trends, salary and savings rate, and suggest where to cut back. "
+                    + "Try \"Where does my money go?\" or \"How can I save more each month?\"",
+            FiType.MUTUAL_FUNDS, "In Mutual Fund Holdings I can tell you what your funds are worth, how much you put in, how spread out "
+                    + "they are and what to look at next. Try \"How diversified are my mutual funds?\"",
+            FiType.EQUITIES, "In Stocks & Demat I can tell you what your holdings are worth and how concentrated the portfolio is. "
+                    + "Try \"Is my stock portfolio too concentrated?\"",
+            FiType.INSURANCE_POLICIES, "In Insurance Policies I can tell you your cover and premiums and review whether the mix looks "
+                    + "adequate. Try \"Is my insurance cover enough?\"",
+            FiType.EPF, "In EPF & Retirement I can tell you your balance and contributions and what they add up to over a year. "
+                    + "Try \"How is my EPF growing?\"");
 
     private static String sectionName(FiType type) {
         return switch (type) {

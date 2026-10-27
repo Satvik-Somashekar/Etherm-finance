@@ -43,7 +43,7 @@ const SECTIONS: Section[] = [
     examples: [
       'What is my net worth?',
       'How much did I spend on groceries last quarter?',
-      'Show my 3 biggest expenses last month',
+      'How am I doing overall, and what should I work on?',
       'How can I reduce my spending?',
       'Export my transactions for last quarter as CSV',
     ],
@@ -66,14 +66,14 @@ const SECTIONS: Section[] = [
     label: 'Mutual Fund Holdings',
     icon: 'monitoring',
     scope: ['MUTUAL_FUNDS'],
-    examples: ['What is the value of my mutual funds?', 'How much have I invested in mutual funds?'],
+    examples: ['How diversified are my mutual funds?', 'What is the value of my mutual funds?', 'How much have I invested in mutual funds?'],
   },
   {
     key: 'stocks',
     label: 'Stocks & Demat',
     icon: 'candlestick_chart',
     scope: ['EQUITIES'],
-    examples: ['What are my stock holdings worth?', 'Show my equity holdings'],
+    examples: ['Is my stock portfolio too concentrated?', 'What are my stock holdings worth?', 'Show my equity holdings'],
   },
   {
     key: 'insurance',
@@ -81,6 +81,7 @@ const SECTIONS: Section[] = [
     icon: 'health_and_safety',
     scope: ['INSURANCE_POLICIES'],
     examples: [
+      'Is my insurance cover enough?',
       'What is my insurance cover?',
       'Did my insurance premiums increase last quarter compared to the one before?',
     ],
@@ -90,14 +91,14 @@ const SECTIONS: Section[] = [
     label: 'EPF & Retirement',
     icon: 'savings',
     scope: ['EPF'],
-    examples: ['What are my EPF contributions this year?', 'What is my EPF balance?'],
+    examples: ['How is my EPF growing?', 'What are my EPF contributions this year?', 'What is my EPF balance?'],
   },
 ]
 
 const INTRO: ChatMessage = {
   id: 'intro',
   role: 'oracle',
-  text: 'Ask about your spending, salary, premiums, investments, EPF or balances, or ask for your transactions or a monthly report as a CSV file. Every figure is computed from your consented records, and each answer lists the records it used.',
+  text: 'Ask in plain words about your spending, insurance, funds, stocks or EPF, and ask how you are doing or what to improve. Pick a section on the left to focus on just that part of your money. Every figure is computed from your consented records, and each answer lists the records it used.',
 }
 
 const SEEDED: ChatMessage[] = [

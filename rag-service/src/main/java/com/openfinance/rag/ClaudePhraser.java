@@ -38,9 +38,9 @@ public class ClaudePhraser implements AnswerPhraser {
             You write a short, practical spending suggestion for a personal finance assistant. The numbers have \
             already been computed by the application. You receive the user's question and a list of \
             placeholders, each with a description of the figure it stands for. Write three or four plain \
-            sentences. Start with "Suggestion:". Name what stands out in the customer's spending, give one or \
-            two concrete, realistic actions for that category, and say what the illustrative trim would free up, \
-            referring to figures only by writing their placeholders exactly, for example {trim10Monthly}. Never \
+            sentences. Start with "Suggestion:". Name what stands out in the customer's numbers, give one or \
+            two concrete, realistic next steps, and mention any rule of thumb or illustrative trim only as a \
+            rough guide, referring to figures only by writing their placeholders exactly, for example {total}. Never \
             write a digit, a number in words, or a currency amount yourself; the application substitutes the \
             values. Say this is a suggestion, not a certainty. Do not give investment, tax or loan advice and \
             do not mention facts that are not in the list. Reply with the sentences only.""";
@@ -86,9 +86,23 @@ public class ClaudePhraser implements AnswerPhraser {
         String period = answer.plan().period() == null ? "all shared data" : answer.plan().period().label();
         return "Question: " + question + "\nPeriod: " + period + "\nPlaceholders:\n" + placeholders
                 + (labels.isEmpty() ? "" : "\nBreakdown item names (write these placeholders too):\n" + labels)
-                + (answer.plan().intent() == com.openfinance.core.compute.Intent.ADVICE
-                ? "\nitem1 is the category in focus (" + answer.plan().subject() + " spending), item2 its largest payee, "
-                + "item3 the next largest flexible category, item4 the largest fixed cost; some may be absent." : "");
+                + adviceHint(answer);
+    }
+
+    /** Tells the model what the area and the breakdown items are, in words only. */
+    private static String adviceHint(ComputedAnswer answer) {
+        if (answer.plan().intent() != com.openfinance.core.compute.Intent.ADVICE) {
+            return "";
+        }
+        return switch (com.openfinance.core.compute.AdviceDomain.of(answer.plan())) {
+            case SPENDING -> "\nArea: everyday spending. item1 is the category in focus (" + answer.plan().subject()
+                    + "), item2 its largest payee, item3 the next largest flexible category, item4 the largest fixed cost; some may be absent.";
+            case INSURANCE -> "\nArea: insurance. Items are the policies. Stay within cover, premiums and the figures given.";
+            case MUTUAL_FUNDS -> "\nArea: mutual funds. item1 is the largest scheme, item2 the largest scheme type. Do not name funds to buy or sell.";
+            case EQUITIES -> "\nArea: stocks. Items are the holdings. Talk about spread and concentration only, never a view on a company.";
+            case EPF -> "\nArea: EPF and retirement savings.";
+            case OVERALL -> "\nArea: overall finances. Items are the asset types, largest first.";
+        };
     }
 
     private String complete(String question, FactSheet facts, ComputedAnswer answer) {

@@ -1,5 +1,6 @@
 package com.openfinance.rag;
 
+import com.openfinance.core.compute.AdviceDomain;
 import com.openfinance.core.compute.DateRange;
 import com.openfinance.core.compute.Intent;
 import com.openfinance.core.compute.QueryPlan;
@@ -67,22 +68,9 @@ public class QuestionParser {
     // ----------------------------------------------------------------- intent
 
     private QueryPlan intent(String q) {
-        // Spending suggestions: built from the customer's own numbers. Investment, tax and credit advice stays out.
-        if (has(q, "reduce", "cut down", "cut back", "cut my", "cut it", "cut costs", " lower ", "spend less", "save more",
-                "saving more", "trim", " tips", "suggest", "budget", "how can i save", "how do i save", "how to save",
-                "curb", "control my spend", "overspend", "too much", "too high", "improve my sav")
-                && !has(q, "invest", "stock", "share", "mutual", " sip", " tax", "loan", "crypto", " buy ", " sell ",
-                "fixed deposit", " fd ", "portfolio", "insurance cover", "policy")) {
-            Set<Category> cats = EnumSet.noneOf(Category.class);
-            CATEGORY_WORDS.forEach((word, cat) -> {
-                if (q.contains(word)) {
-                    cats.add(cat);
-                }
-            });
-            if (has(q, "premium")) {
-                cats.add(Category.PREMIUM_DEBIT);
-            }
-            return QueryPlan.of(Intent.ADVICE).withCategories(cats);
+        QueryPlan advice = advice(q);
+        if (advice != null) {
+            return advice;
         }
         // Forecasts and recommendations on investments are out of scope: answering them with a balance would look like a recommendation.
         if (has(q, " should i ", " should we ", " good time ", " will ", " going to ", " predict", " forecast",
@@ -170,6 +158,55 @@ public class QuestionParser {
                     : QueryPlan.of(Intent.SPEND_CATEGORY).withCategories(cats);
         }
         return QueryPlan.of(Intent.UNSUPPORTED);
+    }
+
+    /** Words that turn a question into a request for a suggestion or a plan. */
+    private static final String[] SAVE_WORDS = {"reduce", "cut down", "cut back", "cut my", "cut it", "cut costs", " lower ",
+            "spend less", "save more", "saving more", "trim", " tips", "suggest", "budget", "how can i save", "how do i save",
+            "how to save", "curb", "control my spend", "overspend", "too much", "too high", "improve my sav"};
+    private static final String[] PLAN_WORDS = {" plan ", "plan my", "plan for", "review my", "health check", "financial health",
+            "how am i doing", "how is my", "how are my", "what should i do", "any advice", "help me plan", "help me understand",
+            "understand my", "explain my", " enough", "adequate", "diversif", "concentrat", "on track", "balanced", "well covered",
+            "am i covered", "am i insured", "improve", "overall"};
+    /** Questions that need a prediction, a product pick or a tax or credit opinion are still declined. */
+    private static final String[] NOT_ADVICE = {" buy ", " sell ", "which stock", "which fund", "which scheme", "which policy",
+            " best ", " tax", "loan", "crypto", "fixed deposit", " fd ", "predict", "forecast", " will ", "going to",
+            "good time", "return", "should i invest", "should i put", "trend"};
+
+    /**
+     * A suggestion or planning question. The subject names what it is about (an {@link AdviceDomain}), or is
+     * GENERIC_SPEND / GENERIC_PLAN when the question names no area, so the Knowledge Base section the customer
+     * is in can decide.
+     */
+    private QueryPlan advice(String q) {
+        boolean saves = has(q, SAVE_WORDS);
+        boolean plans = has(q, PLAN_WORDS);
+        if ((!saves && !plans) || has(q, NOT_ADVICE)) {
+            return null;
+        }
+        Set<Category> cats = EnumSet.noneOf(Category.class);
+        CATEGORY_WORDS.forEach((word, cat) -> {
+            if (q.contains(word)) {
+                cats.add(cat);
+            }
+        });
+        QueryPlan plan = QueryPlan.of(Intent.ADVICE);
+        if (has(q, "insurance", "insured", "policy", "policies", "premium", " cover", "covered")) {
+            return plan.withSubject(AdviceDomain.INSURANCE.name());
+        }
+        if (has(q, "mutual fund", " mf ", " mfs ", " sip", " fund", " folio", "scheme")) {
+            return plan.withSubject(AdviceDomain.MUTUAL_FUNDS.name());
+        }
+        if (has(q, "stock", " share", "equit", "demat")) {
+            return plan.withSubject(AdviceDomain.EQUITIES.name());
+        }
+        if (has(q, " epf", " pf ", "provident", "retire", "pension")) {
+            return plan.withSubject(AdviceDomain.EPF.name());
+        }
+        if (!cats.isEmpty() || has(q, "spend", "expense", "saving", "save", "money", "income", "salary")) {
+            return plan.withCategories(cats);
+        }
+        return plan.withSubject(plans ? "GENERIC_PLAN" : "GENERIC_SPEND");
     }
 
     /** A request for a file: "export my transactions", "download a report", "give me a csv for March". */

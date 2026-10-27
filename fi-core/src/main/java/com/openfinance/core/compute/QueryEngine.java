@@ -65,7 +65,8 @@ public class QueryEngine {
             case INSURANCE_COVER -> snapshot(plan, records, "Total sum assured", r -> r.attributes().getOrDefault("policyName", r.description()));
             case EXPORT_TRANSACTIONS -> exportTransactions(plan, records, retrieved);
             case EXPORT_REPORT -> exportReport(plan, records, retrieved);
-            case ADVICE -> advice(plan, records, retrieved);
+            case ADVICE -> AdviceDomain.of(plan) == AdviceDomain.SPENDING ? advice(plan, records, retrieved)
+                    : AdviceEngine.compute(plan, AdviceDomain.of(plan), records, retrieved.size());
             case UNSUPPORTED -> new ComputedAnswer(plan, List.of(), List.of(), List.of(), 0);
         };
     }
@@ -81,7 +82,16 @@ public class QueryEngine {
                     plan.categories().isEmpty() ? Category.SPENDING : plan.categories(), Direction.DEBIT, from, to);
             case SPEND_CATEGORY -> new RecordFilter(Set.of(FiType.DEPOSIT), tx, plan.categories(), Direction.DEBIT, from, to);
             case TOP_MERCHANTS, SPEND_TREND -> new RecordFilter(Set.of(FiType.DEPOSIT), tx, Category.SPENDING, Direction.DEBIT, from, to);
-            case SAVINGS_RATE, ADVICE -> {
+            case ADVICE -> {
+                AdviceDomain domain = AdviceDomain.of(plan);
+                if (domain != AdviceDomain.SPENDING) {
+                    yield AdviceEngine.filter(plan, domain, ASSET_TYPES);
+                }
+                Set<Category> both = EnumSet.copyOf(Category.SPENDING);
+                both.add(Category.SALARY);
+                yield new RecordFilter(Set.of(FiType.DEPOSIT), tx, both, null, from, to);
+            }
+            case SAVINGS_RATE -> {
                 Set<Category> both = EnumSet.copyOf(Category.SPENDING);
                 both.add(Category.SALARY);
                 yield new RecordFilter(Set.of(FiType.DEPOSIT), tx, both, null, from, to);

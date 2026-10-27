@@ -12,8 +12,10 @@ const MAX_CHIPS = 12
  */
 export function GroundedAnswer({ result }: { result: QueryResult }) {
   const advice = result.intent === 'ADVICE'
+  const spendingAdvice = advice && result.figures.some((f) => f.key === 'focusMonthly')
+  // For a suggestion, the first figures are the headline ones; the rest only feed the sentence.
   const metrics = advice
-    ? result.figures.filter((f) => ['focusMonthly', 'trim10Monthly', 'trim10Yearly'].includes(f.key))
+    ? result.figures.slice(0, 3)
     : result.figures.filter((f) => !['employeeShare', 'employerShare'].includes(f.key) || result.intent === 'EPF_CONTRIBUTIONS')
   const reported = result.figures.find((f) => f.key === 'total')?.value ?? 0
   const items = result.breakdown.slice(0, 5)
@@ -34,13 +36,13 @@ export function GroundedAnswer({ result }: { result: QueryResult }) {
               <div className="mb-2 text-label-sm uppercase tracking-wider text-on-surface-variant">
                 {figure.label}
               </div>
-              <FigureValue figure={figure} />
+              <FigureValue figure={figure} plain={advice} />
             </div>
           ))}
         </div>
       )}
 
-      {!advice && items.length > 1 && (
+      {!spendingAdvice && items.length > 1 && (
         <div className="rounded-md bg-surface-dim p-5">
           <div className="mb-6 flex items-center justify-between">
             <h3 className="text-label-md uppercase tracking-widest text-on-surface">Breakdown</h3>
@@ -103,9 +105,12 @@ export function GroundedAnswer({ result }: { result: QueryResult }) {
   )
 }
 
-function FigureValue({ figure }: { figure: Figure }) {
+function FigureValue({ figure, plain = false }: { figure: Figure; plain?: boolean }) {
   if (figure.unit === 'INR') {
     return <Money value={figure.value} className="text-headline-md text-on-surface" />
+  }
+  if (figure.unit === 'PERCENT' && plain) {
+    return <span className="text-headline-md text-on-surface">{figure.value.toFixed(1)}%</span>
   }
   if (figure.unit === 'PERCENT') {
     const up = figure.value > 0
