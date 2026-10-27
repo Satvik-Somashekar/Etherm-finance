@@ -20,6 +20,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * The deterministic compute layer. Given a plan and the records retrieval returned, it re-applies
@@ -64,6 +65,7 @@ public class QueryEngine {
             case INSURANCE_COVER -> snapshot(plan, records, "Total sum assured", r -> r.attributes().getOrDefault("policyName", r.description()));
             case EXPORT_TRANSACTIONS -> exportTransactions(plan, records, retrieved);
             case EXPORT_REPORT -> exportReport(plan, records, retrieved);
+            case ADVICE -> advice(plan, records, retrieved);
             case UNSUPPORTED -> new ComputedAnswer(plan, List.of(), List.of(), List.of(), 0);
         };
     }
@@ -79,7 +81,7 @@ public class QueryEngine {
                     plan.categories().isEmpty() ? Category.SPENDING : plan.categories(), Direction.DEBIT, from, to);
             case SPEND_CATEGORY -> new RecordFilter(Set.of(FiType.DEPOSIT), tx, plan.categories(), Direction.DEBIT, from, to);
             case TOP_MERCHANTS, SPEND_TREND -> new RecordFilter(Set.of(FiType.DEPOSIT), tx, Category.SPENDING, Direction.DEBIT, from, to);
-            case SAVINGS_RATE -> {
+            case SAVINGS_RATE, ADVICE -> {
                 Set<Category> both = EnumSet.copyOf(Category.SPENDING);
                 both.add(Category.SALARY);
                 yield new RecordFilter(Set.of(FiType.DEPOSIT), tx, both, null, from, to);
@@ -205,6 +207,77 @@ public class QueryEngine {
                 new BreakdownItem("Salary received", earned, ids(income)),
                 new BreakdownItem("Spent", spent, ids(spending)));
         return new ComputedAnswer(plan, figures, items, used, retrieved.size());
+    }
+
+    /** Spending that cannot be cut quickly: the lever for these is the next renewal, not next week. */
+    private static final Set<Category> FIXED = EnumSet.of(Category.RENT, Category.UTILITIES, Category.PREMIUM_DEBIT);
+    private static final BigDecimal TRIM = new BigDecimal("0.10");
+
+    /**
+     * The numbers behind a spending suggestion: the focus category (the one asked about, else the largest
+     * flexible one), its monthly cost, what a 10% trim would free up, and the savings rate with and without it.
+     * The trim is an illustrative assumption, shown as the {@code trimPct} figure. The returned plan names the
+     * focus category and whether it is FIXED or FLEXIBLE so phrasing can pick the right advice.
+     * Breakdown items: 1 focus category, 2 its largest payee, 3 next flexible category, 4 largest fixed cost.
+     */
+    private ComputedAnswer advice(QueryPlan plan, List<FinancialRecord> records, List<FinancialRecord> retrieved) {
+        List<FinancialRecord> income = records.stream().filter(r -> r.category() == Category.SALARY).toList();
+        List<FinancialRecord> spending = records.stream()
+                .filter(r -> r.direction() == Direction.DEBIT && Category.SPENDING.contains(r.category())).toList();
+        if (spending.isEmpty()) {
+            return new ComputedAnswer(plan, List.of(), List.of(), List.of(), retrieved.size());
+        }
+        Map<Category, List<FinancialRecord>> byCategory = spending.stream()
+                .collect(Collectors.groupingBy(FinancialRecord::category));
+        Comparator<Map.Entry<Category, List<FinancialRecord>>> bySpend =
+                Comparator.comparing(e -> sum(e.getValue()), Comparator.reverseOrder());
+        List<Map.Entry<Category, List<FinancialRecord>>> ranked = byCategory.entrySet().stream().sorted(bySpend).toList();
+        Map.Entry<Category, List<FinancialRecord>> focus = ranked.stream()
+                .filter(e -> plan.categories().contains(e.getKey())).findFirst()
+                .or(() -> ranked.stream().filter(e -> !FIXED.contains(e.getKey())).findFirst())
+                .orElse(ranked.get(0));
+        Category focusCategory = focus.getKey();
+        boolean fixed = FIXED.contains(focusCategory);
+
+        long months = Math.max(1, spending.stream().map(r -> YearMonth.from(r.date())).distinct().count());
+        BigDecimal earned = sum(income);
+        BigDecimal spent = sum(spending);
+        BigDecimal focusSpend = sum(focus.getValue());
+        BigDecimal focusMonthly = focusSpend.divide(BigDecimal.valueOf(months), 2, RoundingMode.HALF_UP);
+        BigDecimal trimMonthly = focusSpend.multiply(TRIM).divide(BigDecimal.valueOf(months), 2, RoundingMode.HALF_UP);
+        BigDecimal trimYearly = focusSpend.multiply(TRIM).multiply(BigDecimal.valueOf(12))
+                .divide(BigDecimal.valueOf(months), 2, RoundingMode.HALF_UP);
+
+        List<FinancialRecord> used = new ArrayList<>(income);
+        used.addAll(spending);
+        List<Figure> figures = new ArrayList<>();
+        figures.add(new Figure("focusMonthly", "Average monthly spend on " + label(focusCategory), focusMonthly, Unit.INR, ids(focus.getValue())));
+        figures.add(new Figure("trim10Monthly", "Freed per month by a 10% trim", trimMonthly, Unit.INR, ids(focus.getValue())));
+        figures.add(new Figure("trim10Yearly", "Freed per year by a 10% trim", trimYearly, Unit.INR, ids(focus.getValue())));
+        figures.add(new Figure("trimPct", "Trim assumed (illustrative)", BigDecimal.TEN, Unit.PERCENT, List.of()));
+        figures.add(new Figure("focusShare", "Share of all spending", focusSpend.multiply(BigDecimal.valueOf(100))
+                .divide(spent, 1, RoundingMode.HALF_UP), Unit.PERCENT, ids(spending)));
+        figures.add(new Figure("monthlyAverage", "Average monthly spending", spent.divide(BigDecimal.valueOf(months), 2, RoundingMode.HALF_UP),
+                Unit.INR, ids(spending)));
+        if (earned.signum() > 0) {
+            figures.add(new Figure("savingsRate", "Savings rate now", earned.subtract(spent).multiply(BigDecimal.valueOf(100))
+                    .divide(earned, 1, RoundingMode.HALF_UP), Unit.PERCENT, ids(used)));
+            figures.add(new Figure("newSavingsRate", "Savings rate after the trim",
+                    earned.subtract(spent).add(focusSpend.multiply(TRIM)).multiply(BigDecimal.valueOf(100))
+                            .divide(earned, 1, RoundingMode.HALF_UP), Unit.PERCENT, ids(used)));
+        }
+
+        List<BreakdownItem> items = new ArrayList<>();
+        items.add(new BreakdownItem(label(focusCategory), focusSpend, ids(focus.getValue())));
+        groupSum(focus.getValue(), r -> payeeName(nonNull(r.counterparty(), label(r.category())))).stream().findFirst()
+                .ifPresent(items::add);
+        ranked.stream().filter(e -> !FIXED.contains(e.getKey()) && e.getKey() != focusCategory).findFirst()
+                .ifPresent(e -> items.add(new BreakdownItem(label(e.getKey()), sum(e.getValue()), ids(e.getValue()))));
+        ranked.stream().filter(e -> FIXED.contains(e.getKey()) && e.getKey() != focusCategory).findFirst()
+                .ifPresent(e -> items.add(new BreakdownItem(label(e.getKey()), sum(e.getValue()), ids(e.getValue()))));
+
+        QueryPlan resolved = plan.withCategories(Set.of(focusCategory)).withSubject(fixed ? "FIXED" : "FLEXIBLE");
+        return new ComputedAnswer(resolved, figures, items, used, retrieved.size());
     }
 
     /** Spending grouped by payee, largest first; the breakdown keeps the top N, the total covers all. */

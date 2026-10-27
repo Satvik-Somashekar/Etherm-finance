@@ -11,7 +11,10 @@ const MAX_CHIPS = 12
  * which the Java compute layer produced; nothing is parsed from the sentence.
  */
 export function GroundedAnswer({ result }: { result: QueryResult }) {
-  const metrics = result.figures.filter((f) => !['employeeShare', 'employerShare'].includes(f.key) || result.intent === 'EPF_CONTRIBUTIONS')
+  const advice = result.intent === 'ADVICE'
+  const metrics = advice
+    ? result.figures.filter((f) => ['focusMonthly', 'trim10Monthly', 'trim10Yearly'].includes(f.key))
+    : result.figures.filter((f) => !['employeeShare', 'employerShare'].includes(f.key) || result.intent === 'EPF_CONTRIBUTIONS')
   const reported = result.figures.find((f) => f.key === 'total')?.value ?? 0
   const items = result.breakdown.slice(0, 5)
   // Without a total (savings rate) the rows are not parts of a whole: scale bars to the largest.
@@ -37,7 +40,7 @@ export function GroundedAnswer({ result }: { result: QueryResult }) {
         </div>
       )}
 
-      {items.length > 1 && (
+      {!advice && items.length > 1 && (
         <div className="rounded-md bg-surface-dim p-5">
           <div className="mb-6 flex items-center justify-between">
             <h3 className="text-label-md uppercase tracking-widest text-on-surface">Breakdown</h3>

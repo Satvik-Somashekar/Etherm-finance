@@ -45,8 +45,8 @@ public class GeminiPhraser implements AnswerPhraser {
         }
         FactSheet facts = FactSheet.of(answer);
         try {
-            String draft = complete(ClaudePhraser.userMessage(question, facts, answer));
-            if (draft != null && ClaudePhraser.isSafe(draft, facts)) {
+            String draft = complete(ClaudePhraser.systemFor(answer), ClaudePhraser.userMessage(question, facts, answer));
+            if (draft != null && ClaudePhraser.isSafe(draft, facts, answer)) {
                 return new Phrasing(facts.fill(draft), model);
             }
             log.warn("Model phrasing rejected, using template: {}", draft);
@@ -58,9 +58,9 @@ public class GeminiPhraser implements AnswerPhraser {
         return fallback.phrase(question, answer);
     }
 
-    private String complete(String userMessage) throws IOException, InterruptedException {
+    private String complete(String system, String userMessage) throws IOException, InterruptedException {
         Map<String, Object> body = Map.of(
-                "systemInstruction", Map.of("parts", java.util.List.of(Map.of("text", ClaudePhraser.SYSTEM))),
+                "systemInstruction", Map.of("parts", java.util.List.of(Map.of("text", system))),
                 "contents", java.util.List.of(Map.of("role", "user", "parts", java.util.List.of(Map.of("text", userMessage)))),
                 "generationConfig", Map.of("maxOutputTokens", 1024, "temperature", 0));
         HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/v1beta/models/" + model + ":generateContent"))

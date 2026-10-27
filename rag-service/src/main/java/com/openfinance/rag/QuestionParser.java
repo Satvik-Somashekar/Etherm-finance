@@ -57,7 +57,7 @@ public class QuestionParser {
         DateRange period = period(q, asOf);
         if (period != null && isFlow(plan.intent())) {
             plan = plan.withPeriod(period);
-            if (plan.intent() != Intent.EXPORT_TRANSACTIONS && plan.intent() != Intent.EXPORT_REPORT && has(q, "compar", " vs ", "versus", "increase", "decrease", "change", " grew", " drop", " than ", "went up", "went down")) {
+            if (plan.intent() != Intent.EXPORT_TRANSACTIONS && plan.intent() != Intent.EXPORT_REPORT && plan.intent() != Intent.ADVICE && has(q, "compar", " vs ", "versus", "increase", "decrease", "change", " grew", " drop", " than ", "went up", "went down")) {
                 plan = plan.withCompare(true);
             }
         }
@@ -67,7 +67,24 @@ public class QuestionParser {
     // ----------------------------------------------------------------- intent
 
     private QueryPlan intent(String q) {
-        // Advice and forecasts are out of scope: answering them with a balance would look like a recommendation.
+        // Spending suggestions: built from the customer's own numbers. Investment, tax and credit advice stays out.
+        if (has(q, "reduce", "cut down", "cut back", "cut my", "cut it", "cut costs", " lower ", "spend less", "save more",
+                "saving more", "trim", " tips", "suggest", "budget", "how can i save", "how do i save", "how to save",
+                "curb", "control my spend", "overspend", "too much", "too high", "improve my sav")
+                && !has(q, "invest", "stock", "share", "mutual", " sip", " tax", "loan", "crypto", " buy ", " sell ",
+                "fixed deposit", " fd ", "portfolio", "insurance cover", "policy")) {
+            Set<Category> cats = EnumSet.noneOf(Category.class);
+            CATEGORY_WORDS.forEach((word, cat) -> {
+                if (q.contains(word)) {
+                    cats.add(cat);
+                }
+            });
+            if (has(q, "premium")) {
+                cats.add(Category.PREMIUM_DEBIT);
+            }
+            return QueryPlan.of(Intent.ADVICE).withCategories(cats);
+        }
+        // Forecasts and recommendations on investments are out of scope: answering them with a balance would look like a recommendation.
         if (has(q, " should i ", " should we ", " good time ", " will ", " going to ", " predict", " forecast",
                 " recommend", " advice", " advise", " best ")) {
             return QueryPlan.of(Intent.UNSUPPORTED);
@@ -180,7 +197,7 @@ public class QuestionParser {
     private static boolean isFlow(Intent i) {
         return switch (i) {
             case SPEND_TOTAL, SPEND_CATEGORY, TOP_EXPENSES, INCOME, PREMIUMS_PAID, MF_INVESTED, EPF_CONTRIBUTIONS,
-                 SAVINGS_RATE, TOP_MERCHANTS, SPEND_TREND, EXPORT_TRANSACTIONS, EXPORT_REPORT -> true;
+                 ADVICE, SAVINGS_RATE, TOP_MERCHANTS, SPEND_TREND, EXPORT_TRANSACTIONS, EXPORT_REPORT -> true;
             default -> false;
         };
     }

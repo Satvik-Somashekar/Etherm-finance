@@ -32,6 +32,11 @@ public enum Intent {
     EXPORT_TRANSACTIONS,
     /** The customer asked for a monthly report as a file; the answer carries a download. */
     EXPORT_REPORT,
+    /**
+     * A practical suggestion for spending less or saving more, built from the customer's own computed
+     * spending. The suggestion is the only thing here that is not a record total; the figures behind it are.
+     */
+    ADVICE,
     /** The question did not match anything the compute layer can answer. */
     UNSUPPORTED
 }

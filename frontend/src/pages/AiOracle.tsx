@@ -44,6 +44,7 @@ const SECTIONS: Section[] = [
       'What is my net worth?',
       'How much did I spend on groceries last quarter?',
       'Show my 3 biggest expenses last month',
+      'How can I reduce my spending?',
       'Export my transactions for last quarter as CSV',
     ],
   },
@@ -56,6 +57,7 @@ const SECTIONS: Section[] = [
       'How much did I spend last month?',
       'What is my savings rate?',
       'Which merchants did I spend the most at?',
+      'How can I save more each month?',
       'Export my transactions for last quarter as CSV',
     ],
   },
@@ -175,7 +177,9 @@ export function AiOracle() {
       return
     }
 
-    ask(question, section.scope)
+    // The earlier questions let a follow-up such as "how can I reduce it?" resolve what "it" is.
+    const history = messages.filter((m) => m.role === 'user').map((m) => m.text).slice(-4)
+    ask(question, section.scope, history)
       .then((result) =>
         setMessages((prev) => [
           ...prev,
@@ -367,6 +371,12 @@ export function AiOracle() {
                     <Icon name="auto_awesome" className="text-primary" size={20} />
                   </div>
                   <div className="space-y-6 rounded-lg rounded-tl-sm bg-surface-container p-5 shadow-lg backdrop-blur-xl lg:p-6">
+                    {message.result?.intent === 'ADVICE' && message.result.figures.length > 0 && (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-tertiary/15 px-3 py-1 text-label-sm uppercase tracking-widest text-tertiary">
+                        <Icon name="lightbulb" size={14} />
+                        Suggestion
+                      </span>
+                    )}
                     <p className="text-body-lg text-on-surface">{message.text}</p>
 
                     {message.result && <GroundedAnswer result={message.result} />}

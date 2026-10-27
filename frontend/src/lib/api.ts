@@ -303,10 +303,11 @@ export async function loadOverview(): Promise<Overview> {
   }
 }
 
-/** `scope` limits the question to those account types; empty or omitted means all consented accounts. */
-export async function ask(question: string, scope: FiType[] = []): Promise<QueryResult> {
+/** `history` is the earlier questions in this chat (oldest first), so "how can I reduce it?" knows what "it" is.
+ * `scope` limits the question to those account types; empty or omitted means all consented accounts. */
+export async function ask(question: string, scope: FiType[] = [], history: string[] = []): Promise<QueryResult> {
   return call<QueryResult>('/svc/rag/api/query', {
     method: 'POST',
-    body: JSON.stringify({ customerId: currentCustomerId(), question, scope: scope.length ? scope : null }),
+    body: JSON.stringify({ customerId: currentCustomerId(), question, scope: scope.length ? scope : null, history }),
   })
 }
