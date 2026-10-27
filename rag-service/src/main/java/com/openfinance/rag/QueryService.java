@@ -1,6 +1,8 @@
 package com.openfinance.rag;
 
 import com.openfinance.core.compute.ComputedAnswer;
+import com.openfinance.core.compute.DateRange;
+import com.openfinance.core.compute.Intent;
 import com.openfinance.core.compute.QueryEngine;
 import com.openfinance.core.compute.QueryPlan;
 import com.openfinance.core.consent.ConsentArtifact;
@@ -44,7 +46,7 @@ public class QueryService {
         // Allow
         List<String> consentIds = consents(request);
         LocalDate today = asOf.get();
-        QueryPlan plan = parser.parse(request.question(), today);
+        QueryPlan plan = withConversation(parser.parse(request.question(), today), request.history(), today);
 
         // Scope: a Knowledge Base section only removes data from what the consents allow.
         Set<FiType> scope = request.scope() == null ? Set.of() : request.scope();
@@ -65,8 +67,10 @@ public class QueryService {
 
         // Phrase
         AnswerPhraser.Phrasing phrasing = phraser.phrase(request.question(), computed);
+        String text = plan.intent() == Intent.ADVICE && !computed.empty()
+                ? phrasing.text() + " " + ADVICE_NOTE : phrasing.text();
 
-        return new QueryResponse(request.question(), phrasing.text(), phrasing.phrasedBy(), plan.intent(),
+        return new QueryResponse(request.question(), text, phrasing.phrasedBy(), plan.intent(),
                 plan.period() == null ? null : new QueryResponse.Period(plan.period().from(), plan.period().to(), plan.period().label()),
                 computed.figures(), computed.breakdown(),
                 computed.citations().stream().map(QueryService::cite).toList(),
@@ -74,6 +78,41 @@ public class QueryService {
                         computed.citations().size(), today),
                 export(plan, computed));
     }
+
+    static final String ADVICE_NOTE = "This is a suggestion based on your own numbers, not financial advice.";
+
+    /**
+     * A suggestion needs a topic and a period. A follow-up such as "how can I reduce it?" borrows both from the
+     * most recent spending question in the conversation; with none, the last three full months are used.
+     */
+    private QueryPlan withConversation(QueryPlan plan, List<String> history, LocalDate today) {
+        if (plan.intent() != Intent.ADVICE) {
+            return plan;
+        }
+        if (history != null) {
+            for (int i = history.size() - 1; i >= 0 && (plan.categories().isEmpty() || plan.period() == null); i--) {
+                QueryPlan earlier = parser.parse(history.get(i), today);
+                if (!CONTEXT_INTENTS.contains(earlier.intent())) {
+                    continue;
+                }
+                if (plan.categories().isEmpty() && !earlier.categories().isEmpty()) {
+                    plan = plan.withCategories(earlier.categories());
+                }
+                if (plan.period() == null && earlier.period() != null) {
+                    plan = plan.withPeriod(earlier.period());
+                }
+                break;
+            }
+        }
+        if (plan.period() == null) {
+            LocalDate first = today.withDayOfMonth(1).minusMonths(3);
+            plan = plan.withPeriod(new DateRange(first, today.withDayOfMonth(1).minusDays(1), "the last 3 months"));
+        }
+        return plan;
+    }
+
+    private static final Set<Intent> CONTEXT_INTENTS = EnumSet.of(Intent.SPEND_TOTAL, Intent.SPEND_CATEGORY,
+            Intent.TOP_EXPENSES, Intent.SPEND_TREND, Intent.TOP_MERCHANTS, Intent.SAVINGS_RATE, Intent.ADVICE);
 
     /** The FI types an intent reads from; all of them when it does not pick. */
     private Set<FiType> naturalTypes(QueryPlan plan) {

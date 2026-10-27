@@ -3,6 +3,7 @@ package com.openfinance.rag;
 import com.openfinance.core.compute.ComputedAnswer;
 import com.openfinance.core.compute.Figure;
 import com.openfinance.core.compute.QueryPlan;
+import com.openfinance.core.model.Category;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -70,10 +71,49 @@ public class TemplatePhraser implements AnswerPhraser {
                     + ", built from {count} transactions. Use the Download button to save it.";
             case SPEND_TREND -> "You spent {total} " + period + ", an average of {monthlyAverage} a month. "
                     + top + " was the highest month at {item1_value}.";
+            case ADVICE -> advice(answer, facts, period);
             case UNSUPPORTED -> UNSUPPORTED;
         };
         return sentence + comparison(answer);
     }
+
+    /** A practical suggestion: the category, a lever specific to it, and the saving a 10% trim would free up. */
+    private static String advice(ComputedAnswer answer, FactSheet facts, String period) {
+        QueryPlan plan = answer.plan();
+        Category category = plan.categories().iterator().next();
+        boolean fixed = "FIXED".equals(plan.subject());
+        StringBuilder s = new StringBuilder("Suggestion: ");
+        if (fixed) {
+            s.append("{item1_label} is a fixed cost for you, about {focusMonthly} a month, so it will not shrink overnight. ")
+                    .append(TIPS.get(category)).append(" Even a {trimPct} saving there frees {trim10Monthly} a month. ");
+            if (facts.label(3) != null) {
+                s.append("The quicker win is {item3_label}, where a {trimPct} trim is easier to start. ");
+            }
+        } else {
+            s.append("{item1_label} is where you can most easily save: about {focusMonthly} a month, {focusShare} of everything you spend. ")
+                    .append(TIPS.get(category)).append(" Trimming it by {trimPct} would free about {trim10Monthly} a month, {trim10Yearly} over a year");
+            if (facts.has("newSavingsRate")) {
+                s.append(", moving your savings rate from {savingsRate} to {newSavingsRate}");
+            }
+            s.append(". ");
+            if (facts.label(2) != null) {
+                s.append("Your largest payee here is {item2_label} ({item2_value} " + period + "), a good place to start.");
+            }
+        }
+        return s.toString().trim();
+    }
+
+    private static final java.util.Map<Category, String> TIPS = java.util.Map.of(
+            Category.GROCERIES, "Planning one weekly shop and buying staples in bulk usually trims this without changing what you eat.",
+            Category.FOOD, "A weekly cap on eating out, and ordering in less often, is the quickest lever.",
+            Category.SHOPPING, "Waiting a day or two before non-essential purchases cuts the impulse buys.",
+            Category.FUEL, "Combining errands into fewer trips cuts fuel without giving anything up.",
+            Category.TRANSPORT, "Using public transport or shared rides for routine trips is the practical lever.",
+            Category.CASH_WITHDRAWAL, "Cash disappears untracked, so paying digitally makes the spending visible.",
+            Category.OTHER_DEBIT, "Scan these transactions for recurring charges you no longer use.",
+            Category.RENT, "The lever is the next renewal, where negotiating or comparing nearby options can help.",
+            Category.UTILITIES, "Checking your plans and tariffs for cheaper options is the practical lever.",
+            Category.PREMIUM_DEBIT, "Compare renewal quotes and check the cover still fits before renewing.");
 
     private static String savings(ComputedAnswer answer, String period) {
         Figure saved = answer.figure("saved");

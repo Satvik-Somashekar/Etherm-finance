@@ -66,10 +66,10 @@ class PhrasingTest {
     @Test
     void modelDraftWithItsOwnNumberIsRejected() {
         FactSheet facts = FactSheet.of(answer(Intent.SPEND_CATEGORY, false));
-        assertThat(ClaudePhraser.isSafe("You spent {total} on food last quarter.", facts)).isTrue();
-        assertThat(ClaudePhraser.isSafe("You spent about 12 lakh on food.", facts)).isFalse();
-        assertThat(ClaudePhraser.isSafe("You spent {total}, roughly {estimate}.", facts)).isFalse();
-        assertThat(ClaudePhraser.isSafe("", facts)).isFalse();
+        assertThat(ClaudePhraser.isSafe("You spent {total} on food last quarter.", facts, answer(Intent.SPEND_CATEGORY, false))).isTrue();
+        assertThat(ClaudePhraser.isSafe("You spent about 12 lakh on food.", facts, answer(Intent.SPEND_CATEGORY, false))).isFalse();
+        assertThat(ClaudePhraser.isSafe("You spent {total}, roughly {estimate}.", facts, answer(Intent.SPEND_CATEGORY, false))).isFalse();
+        assertThat(ClaudePhraser.isSafe("", facts, answer(Intent.SPEND_CATEGORY, false))).isFalse();
     }
 
     @Test

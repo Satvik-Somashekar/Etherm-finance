@@ -33,6 +33,22 @@ public class ClaudePhraser implements AnswerPhraser {
             application substitutes the values. Do not add advice, caveats or facts that are not in the list. \
             Reply with the sentences only.""";
 
+    /** For suggestions the model may be practical, but every figure still arrives through a placeholder. */
+    static final String ADVICE_SYSTEM = """
+            You write a short, practical spending suggestion for a personal finance assistant. The numbers have \
+            already been computed by the application. You receive the user's question and a list of \
+            placeholders, each with a description of the figure it stands for. Write three or four plain \
+            sentences. Start with "Suggestion:". Name what stands out in the customer's spending, give one or \
+            two concrete, realistic actions for that category, and say what the illustrative trim would free up, \
+            referring to figures only by writing their placeholders exactly, for example {trim10Monthly}. Never \
+            write a digit, a number in words, or a currency amount yourself; the application substitutes the \
+            values. Say this is a suggestion, not a certainty. Do not give investment, tax or loan advice and \
+            do not mention facts that are not in the list. Reply with the sentences only.""";
+
+    static String systemFor(ComputedAnswer answer) {
+        return answer.plan().intent() == com.openfinance.core.compute.Intent.ADVICE ? ADVICE_SYSTEM : SYSTEM;
+    }
+
     private final AnthropicClient client;
     private final String model;
     private final TemplatePhraser fallback;
@@ -51,7 +67,7 @@ public class ClaudePhraser implements AnswerPhraser {
         FactSheet facts = FactSheet.of(answer);
         try {
             String draft = complete(question, facts, answer);
-            if (draft != null && isSafe(draft, facts)) {
+            if (draft != null && isSafe(draft, facts, answer)) {
                 return new Phrasing(facts.fill(draft), model);
             }
             log.warn("Model phrasing rejected, using template: {}", draft);
@@ -69,14 +85,17 @@ public class ClaudePhraser implements AnswerPhraser {
         String labels = labels(facts);
         String period = answer.plan().period() == null ? "all shared data" : answer.plan().period().label();
         return "Question: " + question + "\nPeriod: " + period + "\nPlaceholders:\n" + placeholders
-                + (labels.isEmpty() ? "" : "\nBreakdown item names (write these placeholders too):\n" + labels);
+                + (labels.isEmpty() ? "" : "\nBreakdown item names (write these placeholders too):\n" + labels)
+                + (answer.plan().intent() == com.openfinance.core.compute.Intent.ADVICE
+                ? "\nitem1 is the category in focus (" + answer.plan().subject() + " spending), item2 its largest payee, "
+                + "item3 the next largest flexible category, item4 the largest fixed cost; some may be absent." : "");
     }
 
     private String complete(String question, FactSheet facts, ComputedAnswer answer) {
         MessageCreateParams params = MessageCreateParams.builder()
                 .model(model)
                 .maxTokens(1024L)
-                .system(SYSTEM)
+                .system(systemFor(answer))
                 .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.LOW).build())
                 .addUserMessage(userMessage(question, facts, answer))
                 .build();
@@ -100,8 +119,9 @@ public class ClaudePhraser implements AnswerPhraser {
     }
 
     /** No digits of the model's own, and every placeholder it wrote is one we can fill. */
-    static boolean isSafe(String draft, FactSheet facts) {
-        if (draft.isBlank() || draft.length() > 600) {
+    static boolean isSafe(String draft, FactSheet facts, ComputedAnswer answer) {
+        int limit = answer.plan().intent() == com.openfinance.core.compute.Intent.ADVICE ? 900 : 600;
+        if (draft.isBlank() || draft.length() > limit) {
             return false;
         }
         if (DIGIT.matcher(facts.stripPlaceholders(draft)).find()) {
