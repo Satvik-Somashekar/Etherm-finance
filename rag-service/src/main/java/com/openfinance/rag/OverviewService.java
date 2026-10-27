@@ -33,7 +33,7 @@ public class OverviewService {
     }
 
     public OverviewResponse overview(String customerId) {
-        List<String> consentIds = queries.consents(new QueryRequest(null, customerId, null));
+        List<String> consentIds = queries.consents(new QueryRequest(null, customerId, null, null));
 
         List<FinancialRecord> assets = upstream.retrieve(consentIds, NetWorthHistory.filter()).records();
         List<OverviewResponse.HistoryPoint> points = history.compute(assets).stream()
@@ -49,7 +49,7 @@ public class OverviewService {
                 .toList();
 
         List<QueryResponse> insights = INSIGHT_QUESTIONS.stream()
-                .map(q -> queries.answer(new QueryRequest(q, null, consentIds)))
+                .map(q -> queries.answer(new QueryRequest(q, null, consentIds, null)))
                 .filter(a -> !a.citations().isEmpty())
                 .toList();
 

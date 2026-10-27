@@ -5,12 +5,16 @@ import com.openfinance.core.compute.QueryEngine;
 import com.openfinance.core.compute.QueryPlan;
 import com.openfinance.core.consent.ConsentArtifact;
 import com.openfinance.core.consent.ConsentStatus;
+import com.openfinance.core.model.FiType;
 import com.openfinance.core.model.FinancialRecord;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.function.Supplier;
 
 /**
@@ -42,6 +46,17 @@ public class QueryService {
         LocalDate today = asOf.get();
         QueryPlan plan = parser.parse(request.question(), today);
 
+        // Scope: a Knowledge Base section only removes data from what the consents allow.
+        Set<FiType> scope = request.scope() == null ? Set.of() : request.scope();
+        if (!scope.isEmpty()) {
+            Set<FiType> usable = new java.util.HashSet<>(naturalTypes(plan));
+            usable.retainAll(scope);
+            if (usable.isEmpty()) {
+                return outsideScope(request.question(), plan, scope, consentIds, today);
+            }
+            plan = narrow(plan, usable);
+        }
+
         // Find
         UpstreamClients.Retrieved found = upstream.retrieve(consentIds, engine.retrievalFilter(plan));
 
@@ -60,6 +75,40 @@ public class QueryService {
                 export(plan, computed));
     }
 
+    /** The FI types an intent reads from; all of them when it does not pick. */
+    private Set<FiType> naturalTypes(QueryPlan plan) {
+        Set<FiType> types = engine.retrievalFilter(plan).fiTypes();
+        return types.isEmpty() ? EnumSet.allOf(FiType.class) : types;
+    }
+
+    /** Intents that read "everything" are limited to the section; the others already name their types. */
+    private static QueryPlan narrow(QueryPlan plan, Set<FiType> usable) {
+        return switch (plan.intent()) {
+            case BALANCE, HOLDINGS, EXPORT_TRANSACTIONS -> plan.withFiTypes(usable);
+            default -> plan;
+        };
+    }
+
+    private QueryResponse outsideScope(String question, QueryPlan plan, Set<FiType> scope, List<String> consentIds,
+                                       LocalDate today) {
+        String section = scope.stream().map(QueryService::sectionName).sorted().collect(Collectors.joining(" and "));
+        String text = "That is outside the section you selected (" + section + "), so I did not look at it. "
+                + "Switch to All accounts or the matching section to ask it.";
+        return new QueryResponse(question, text, "template", plan.intent(),
+                plan.period() == null ? null : new QueryResponse.Period(plan.period().from(), plan.period().to(), plan.period().label()),
+                List.of(), List.of(), List.of(), new QueryResponse.Grounding(consentIds, 0, 0, 0, today), null);
+    }
+
+    private static String sectionName(FiType type) {
+        return switch (type) {
+            case DEPOSIT -> "Deposits";
+            case MUTUAL_FUNDS -> "Mutual funds";
+            case INSURANCE_POLICIES -> "Insurance";
+            case EPF -> "EPF";
+            case EQUITIES -> "Stocks";
+        };
+    }
+
     private static QueryResponse.Export export(QueryPlan plan, ComputedAnswer computed) {
         if (computed.empty()) {
             return null;
@@ -74,7 +123,8 @@ public class QueryService {
         }
         return new QueryResponse.Export(kind, plan.period() == null ? null : plan.period().from(),
                 plan.period() == null ? null : plan.period().to(),
-                plan.categories().stream().map(Enum::name).sorted().toList());
+                plan.categories().stream().map(Enum::name).sorted().toList(),
+                plan.fiTypes().stream().map(Enum::name).sorted().toList());
     }
 
     List<String> consents(QueryRequest request) {

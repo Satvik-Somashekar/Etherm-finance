@@ -48,7 +48,7 @@ public class QueryController {
         return overviews.overview(customerId);
     }
 
-    /** Consent-bounded transactions as CSV. Optional filters: from, to (yyyy-MM-dd), category (comma-separated), fiType. */
+    /** Consent-bounded transactions as CSV. Optional filters: from, to (yyyy-MM-dd), category and fiType (comma-separated). */
     @GetMapping("/customers/{customerId}/export/transactions.csv")
     public ResponseEntity<String> transactionsCsv(@PathVariable String customerId,
                                                   @RequestParam(required = false) String from,
@@ -61,8 +61,13 @@ public class QueryController {
                 categories.add(Category.valueOf(name.trim().toUpperCase()));
             }
         }
-        String csv = exports.transactionsCsv(customerId, date(from), date(to), categories,
-                fiType == null ? null : FiType.valueOf(fiType.toUpperCase()));
+        Set<FiType> fiTypes = EnumSet.noneOf(FiType.class);
+        if (fiType != null && !fiType.isBlank()) {
+            for (String name : fiType.split(",")) {
+                fiTypes.add(FiType.valueOf(name.trim().toUpperCase()));
+            }
+        }
+        String csv = exports.transactionsCsv(customerId, date(from), date(to), categories, fiTypes);
         return csv(csv, "etherm-transactions.csv");
     }
 

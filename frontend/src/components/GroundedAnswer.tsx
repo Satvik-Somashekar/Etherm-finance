@@ -129,6 +129,7 @@ function ExportDownload({ file }: { file: NonNullable<QueryResult['export']> }) 
         from: file.from ?? undefined,
         to: file.to ?? undefined,
         categories: file.categories,
+        fiTypes: file.fiTypes,
       })
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not reach the services.')

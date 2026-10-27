@@ -96,8 +96,9 @@ public class QueryEngine {
                     : plan.fiTypes(), Set.of(RecordKind.HOLDING), Set.of(), null, null, null);
             case INSURANCE_COVER -> new RecordFilter(Set.of(FiType.INSURANCE_POLICIES), Set.of(RecordKind.POLICY),
                     Set.of(), null, null, null);
-            case EXPORT_TRANSACTIONS -> new RecordFilter(Set.of(), tx, plan.categories(), null, from, to);
-            case EXPORT_REPORT -> new RecordFilter(Set.of(), tx, Set.of(), null, from, to);
+            case EXPORT_TRANSACTIONS -> new RecordFilter(plan.fiTypes(), tx, plan.categories(), null, from, to);
+            // The report is built from the deposit account's income and spending.
+            case EXPORT_REPORT -> new RecordFilter(Set.of(FiType.DEPOSIT), tx, Set.of(), null, from, to);
             // Matches nothing, so an unsupported question never retrieves or cites data.
             case UNSUPPORTED -> new RecordFilter(Set.of(), Set.of(RecordKind.TRANSACTION), Set.of(), null,
                     LocalDate.MAX, LocalDate.MIN);

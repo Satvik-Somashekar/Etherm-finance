@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Icon } from '../components/Icon'
 import { Money } from '../components/Money'
-import { knowledgeBase, premiumBreakdown, premiumTotals } from '../data/mock'
+import { premiumBreakdown, premiumTotals } from '../data/mock'
 import { formatCompact } from '../lib/format'
 import { ask, type QueryResult } from '../lib/api'
 import { DEMO, DEMO_QUESTIONS } from '../lib/demo'
 import { useAccounts } from '../state/AccountsContext'
 import { GroundedAnswer } from '../components/GroundedAnswer'
+import type { FiType } from '../types/fi'
 
 interface ChatMessage {
   id: string
@@ -16,14 +18,78 @@ interface ChatMessage {
   grounded?: boolean
   /** A live answer from rag-service, with its Java-computed figures and citations. */
   result?: QueryResult
+  /** A marker line shown when the user switches section, not a message. */
+  divider?: boolean
+  /** Suggested questions for the section a divider opens. */
+  examples?: string[]
 }
 
-const EXAMPLES = DEMO ? DEMO_QUESTIONS : [
-  'Did my insurance premiums increase last quarter compared to the one before?',
-  'How much did I spend on groceries last quarter?',
-  'What is my net worth?',
-  'Show my 3 biggest expenses last month',
-  'Export my transactions for last quarter as CSV',
+/** A Knowledge Base section: the account types the Oracle may look at while it is selected. */
+interface Section {
+  key: string
+  label: string
+  icon: string
+  /** Empty means every consented account type. */
+  scope: FiType[]
+  examples: string[]
+}
+
+const SECTIONS: Section[] = [
+  {
+    key: 'all',
+    label: 'All accounts',
+    icon: 'hub',
+    scope: [],
+    examples: [
+      'What is my net worth?',
+      'How much did I spend on groceries last quarter?',
+      'Show my 3 biggest expenses last month',
+      'Export my transactions for last quarter as CSV',
+    ],
+  },
+  {
+    key: 'deposits',
+    label: 'Deposits & Cashflow',
+    icon: 'account_balance_wallet',
+    scope: ['DEPOSIT'],
+    examples: [
+      'How much did I spend last month?',
+      'What is my savings rate?',
+      'Which merchants did I spend the most at?',
+      'Export my transactions for last quarter as CSV',
+    ],
+  },
+  {
+    key: 'mf',
+    label: 'Mutual Fund Holdings',
+    icon: 'monitoring',
+    scope: ['MUTUAL_FUNDS'],
+    examples: ['What is the value of my mutual funds?', 'How much have I invested in mutual funds?'],
+  },
+  {
+    key: 'stocks',
+    label: 'Stocks & Demat',
+    icon: 'candlestick_chart',
+    scope: ['EQUITIES'],
+    examples: ['What are my stock holdings worth?', 'Show my equity holdings'],
+  },
+  {
+    key: 'insurance',
+    label: 'Insurance Policies',
+    icon: 'health_and_safety',
+    scope: ['INSURANCE_POLICIES'],
+    examples: [
+      'What is my insurance cover?',
+      'Did my insurance premiums increase last quarter compared to the one before?',
+    ],
+  },
+  {
+    key: 'epf',
+    label: 'EPF & Retirement',
+    icon: 'savings',
+    scope: ['EPF'],
+    examples: ['What are my EPF contributions this year?', 'What is my EPF balance?'],
+  },
 ]
 
 const INTRO: ChatMessage = {
@@ -60,11 +126,31 @@ export function AiOracle() {
   const messages = fromLive(stored)
   const [draft, setDraft] = useState('')
   const [thinking, setThinking] = useState(false)
+  const [section, setSection] = useState<Section>(SECTIONS[0])
+  const navigate = useNavigate()
+  const examples = DEMO ? DEMO_QUESTIONS : section.examples
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
   }, [messages, thinking])
+
+  function switchSection(next: Section) {
+    if (next.key === section.key) return
+    setSection(next)
+    setMessages((prev) => [
+      ...fromLive(prev),
+      {
+        id: `d-${Date.now()}`,
+        role: 'oracle',
+        divider: true,
+        examples: DEMO ? DEMO_QUESTIONS : next.examples,
+        text: `Context: ${next.label}. From here the Oracle looks only at ${
+          next.scope.length ? 'this section' : 'all your consented accounts'
+        }.`,
+      },
+    ])
+  }
 
   function send(question: string) {
     if (!question || thinking) return
@@ -89,7 +175,7 @@ export function AiOracle() {
       return
     }
 
-    ask(question)
+    ask(question, section.scope)
       .then((result) =>
         setMessages((prev) => [
           ...prev,
@@ -127,45 +213,64 @@ export function AiOracle() {
           </p>
         </div>
         <div className="space-y-6 px-4 pb-8">
-          {knowledgeBase.map((group) => (
-            <div key={group.category}>
-              <div className="mb-1 flex items-center gap-2 px-4 py-2 opacity-50">
-                <Icon name={group.icon} size={16} />
-                <span className="text-label-sm uppercase tracking-widest text-on-surface">
-                  {group.category}
-                </span>
-              </div>
-              <ul className="space-y-1">
-                {group.items.map((item) => {
-                  const active = item === 'Insurance Policies'
-                  return (
-                    <li key={item}>
-                      <button
-                        type="button"
-                        className={`group relative flex w-full items-center justify-between overflow-hidden rounded px-4 py-3 text-left text-body-md transition-colors ${
-                          active
-                            ? 'bg-primary/10 text-primary'
-                            : 'text-on-surface hover:bg-surface-container-high'
-                        }`}
-                      >
-                        {active && (
-                          <span className="absolute bottom-0 left-0 top-0 w-1 rounded-r-full bg-primary" />
-                        )}
-                        {item}
-                        <Icon
-                          name="chevron_right"
-                          size={18}
-                          className={
-                            active ? '' : 'opacity-0 transition-opacity group-hover:opacity-100'
-                          }
-                        />
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
+          <div>
+            <div className="mb-1 flex items-center gap-2 px-4 py-2 opacity-50">
+              <Icon name="account_balance_wallet" size={16} />
+              <span className="text-label-sm uppercase tracking-widest text-on-surface">
+                Financial Information
+              </span>
             </div>
-          ))}
+            <ul className="space-y-1">
+              {SECTIONS.map((item) => {
+                const active = item.key === section.key
+                return (
+                  <li key={item.key}>
+                    <button
+                      type="button"
+                      onClick={() => switchSection(item)}
+                      aria-pressed={active}
+                      className={`group relative flex w-full items-center justify-between overflow-hidden rounded px-4 py-3 text-left text-body-md transition-colors ${
+                        active
+                          ? 'bg-primary/10 text-primary'
+                          : 'text-on-surface hover:bg-surface-container-high'
+                      }`}
+                    >
+                      {active && (
+                        <span className="absolute bottom-0 left-0 top-0 w-1 rounded-r-full bg-primary" />
+                      )}
+                      {item.label}
+                      <Icon
+                        name="chevron_right"
+                        size={18}
+                        className={active ? '' : 'opacity-0 transition-opacity group-hover:opacity-100'}
+                      />
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+          <div>
+            <div className="mb-1 flex items-center gap-2 px-4 py-2 opacity-50">
+              <Icon name="verified_user" size={16} />
+              <span className="text-label-sm uppercase tracking-widest text-on-surface">
+                Consent & Audit
+              </span>
+            </div>
+            <ul className="space-y-1">
+              {['Active Consents', 'Data Access Log'].map((item) => (
+                <li key={item}>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/consent')}
+                    className="flex w-full items-center justify-between rounded px-4 py-3 text-left text-body-md text-on-surface transition-colors hover:bg-surface-container-high"
+                  >
+                    {item}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
 
         <div className="relative mt-auto p-8">
@@ -201,7 +306,7 @@ export function AiOracle() {
             </h1>
             <p className="mt-1 truncate text-label-md text-on-surface-variant opacity-70">
               {source === 'live'
-                ? 'Scope: all accounts under your active consents'
+                ? `Scope: ${section.scope.length ? section.label : 'all accounts'} · under your active consents`
                 : 'Scope: Insurance Policies · 4 consented records (mock)'}
             </p>
           </div>
@@ -231,7 +336,25 @@ export function AiOracle() {
           </div>
 
           {messages.map((message) =>
-            message.role === 'user' ? (
+            message.divider ? (
+              <div key={message.id} className="flex flex-col items-center gap-3">
+                <span className="rounded-full bg-surface-container-high px-4 py-1 text-label-sm text-on-surface-variant">
+                  {message.text}
+                </span>
+                <div className="flex max-w-4xl flex-wrap justify-center gap-2">
+                  {message.examples?.map((example) => (
+                    <button
+                      key={example}
+                      type="button"
+                      onClick={() => send(example)}
+                      className="rounded-full bg-surface-container-highest px-3 py-1.5 text-left text-label-md text-on-surface-variant transition-colors hover:text-on-surface"
+                    >
+                      {example}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : message.role === 'user' ? (
               <div key={message.id} className="mx-auto flex w-full max-w-4xl justify-end">
                 <div className="max-w-[85%] rounded-lg rounded-br-sm bg-surface-container-highest p-5 shadow-md">
                   <p className="text-body-lg text-on-surface">{message.text}</p>
@@ -250,7 +373,7 @@ export function AiOracle() {
 
                     {message.id === 'intro' && (
                       <div className="flex flex-wrap gap-2">
-                        {EXAMPLES.map((example) => (
+                        {examples.map((example) => (
                           <button
                             key={example}
                             type="button"
