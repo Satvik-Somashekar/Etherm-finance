@@ -49,13 +49,14 @@ export type ExportKind = 'transactions' | 'report'
  */
 export async function downloadExport(
   kind: ExportKind,
-  range: { from?: string; to?: string; categories?: string[] } = {},
+  range: { from?: string; to?: string; categories?: string[]; fiTypes?: string[] } = {},
 ): Promise<void> {
   if (DEMO) throw new ApiError(503, 'Exports need the live services, which the public demo does not run.')
   const query = new URLSearchParams()
   if (range.from) query.set('from', range.from)
   if (range.to) query.set('to', range.to)
   if (range.categories?.length) query.set('category', range.categories.join(','))
+  if (range.fiTypes?.length) query.set('fiType', range.fiTypes.join(','))
   const path = `/svc/rag/api/customers/${encodeURIComponent(currentCustomerId())}/export/${kind}.csv`
   const response = await fetch(query.size ? `${path}?${query}` : path)
   if (!response.ok) {
@@ -157,7 +158,7 @@ export interface QueryResult {
     asOf: string
   }
   /** Present when the question asked for a file; download it with `downloadExport`. */
-  export: { kind: ExportKind; from: string | null; to: string | null; categories: string[] } | null
+  export: { kind: ExportKind; from: string | null; to: string | null; categories: string[]; fiTypes?: string[] } | null
 }
 
 interface BackendOverview {
@@ -302,9 +303,10 @@ export async function loadOverview(): Promise<Overview> {
   }
 }
 
-export async function ask(question: string): Promise<QueryResult> {
+/** `scope` limits the question to those account types; empty or omitted means all consented accounts. */
+export async function ask(question: string, scope: FiType[] = []): Promise<QueryResult> {
   return call<QueryResult>('/svc/rag/api/query', {
     method: 'POST',
-    body: JSON.stringify({ customerId: currentCustomerId(), question }),
+    body: JSON.stringify({ customerId: currentCustomerId(), question, scope: scope.length ? scope : null }),
   })
 }

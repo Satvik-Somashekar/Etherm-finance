@@ -43,12 +43,12 @@ public class ExportService {
     }
 
     /** One row per transaction, oldest first. Every filter is optional. */
-    public String transactionsCsv(String customerId, LocalDate from, LocalDate to, Set<Category> categories, FiType fiType) {
+    public String transactionsCsv(String customerId, LocalDate from, LocalDate to, Set<Category> categories, Set<FiType> fiTypes) {
         List<FinancialRecord> records = transactions(customerId).stream()
                 .filter(r -> from == null || !r.date().isBefore(from))
                 .filter(r -> to == null || !r.date().isAfter(to))
                 .filter(r -> categories == null || categories.isEmpty() || categories.contains(r.category()))
-                .filter(r -> fiType == null || r.fiType() == fiType)
+                .filter(r -> fiTypes == null || fiTypes.isEmpty() || fiTypes.contains(r.fiType()))
                 .sorted(Comparator.comparing(FinancialRecord::date).thenComparing(FinancialRecord::recordId))
                 .toList();
         Csv csv = new Csv();
@@ -106,7 +106,7 @@ public class ExportService {
     }
 
     private List<FinancialRecord> transactions(String customerId) {
-        List<String> consentIds = queries.consents(new QueryRequest(null, customerId, null));
+        List<String> consentIds = queries.consents(new QueryRequest(null, customerId, null, null));
         RecordFilter filter = new RecordFilter(Set.of(), Set.of(RecordKind.TRANSACTION), Set.of(), null, null, null);
         return upstream.retrieve(consentIds, filter).records();
     }

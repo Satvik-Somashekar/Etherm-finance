@@ -32,8 +32,9 @@ public record QueryResponse(
      *
      * @param kind       {@code transactions} or {@code report}
      * @param categories transaction categories to keep; empty means all
+     * @param fiTypes    FI types to keep; empty means all
      */
-    public record Export(String kind, LocalDate from, LocalDate to, List<String> categories) {
+    public record Export(String kind, LocalDate from, LocalDate to, List<String> categories, List<String> fiTypes) {
     }
 
     public record Period(LocalDate from, LocalDate to, String label) {
