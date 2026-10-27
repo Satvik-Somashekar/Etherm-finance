@@ -26,6 +26,7 @@ class QuestionParserTest {
     @ParameterizedTest
     @CsvSource(delimiter = '|', value = {
             "How much did I spend on groceries last quarter?|SPEND_CATEGORY",
+            "I want you to compare my expenses and income|SAVINGS_RATE",
             "What did I spend in total last month?|SPEND_TOTAL",
             "Show my 3 biggest expenses this year|TOP_EXPENSES",
             "How much salary did I receive since April?|INCOME",

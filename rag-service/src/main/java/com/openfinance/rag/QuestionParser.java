@@ -81,6 +81,11 @@ public class QuestionParser {
         if (export != null) {
             return export;
         }
+        // Income set against spending is the savings picture, not an income-only question.
+        if (has(q, "compar", " vs ", "versus", " against ", " and ") && has(q, "expense", "spend", "spent", "outgo")
+                && has(q, "income", "salary", "earn")) {
+            return QueryPlan.of(Intent.SAVINGS_RATE);
+        }
         if (has(q, "savings rate", "saving rate", "how much did i save", "how much do i save", "how much have i saved",
                 "how much i saved", "am i saving", "did i save", " i saved ", "left over", "leftover", "left after")
                 && !has(q, "savings account")) {

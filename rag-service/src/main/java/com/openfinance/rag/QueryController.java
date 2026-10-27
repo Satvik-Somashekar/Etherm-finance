@@ -31,8 +31,10 @@ public class QueryController {
     private final QueryService service;
     private final OverviewService overviews;
     private final ExportService exports;
+    private final ChatService chat;
 
-    public QueryController(QueryService service, OverviewService overviews, ExportService exports) {
+    public QueryController(QueryService service, OverviewService overviews, ExportService exports, ChatService chat) {
+        this.chat = chat;
         this.service = service;
         this.overviews = overviews;
         this.exports = exports;
@@ -41,6 +43,12 @@ public class QueryController {
     @PostMapping("/query")
     public QueryResponse query(@RequestBody QueryRequest request) {
         return service.answer(request);
+    }
+
+    /** Free conversation: the model looks figures up through tools when one is configured, else the typed-question path answers. */
+    @PostMapping("/chat")
+    public QueryResponse chat(@RequestBody ChatRequest request) {
+        return chat.chat(request);
     }
 
     @GetMapping("/customers/{customerId}/overview")

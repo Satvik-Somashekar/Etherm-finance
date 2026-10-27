@@ -303,11 +303,20 @@ export async function loadOverview(): Promise<Overview> {
   }
 }
 
-/** `history` is the earlier questions in this chat (oldest first), so "how can I reduce it?" knows what "it" is.
- * `scope` limits the question to those account types; empty or omitted means all consented accounts. */
-export async function ask(question: string, scope: FiType[] = [], history: string[] = []): Promise<QueryResult> {
-  return call<QueryResult>('/svc/rag/api/query', {
+/** One earlier message in the conversation. */
+export interface Turn {
+  role: 'user' | 'assistant'
+  text: string
+}
+
+/**
+ * Sends a message in the conversation. `turns` are the earlier messages (oldest first), so the model can follow
+ * what was said; `scope` limits the question to those account types (a Knowledge Base section), and empty or
+ * omitted means all consented accounts. The public demo has no model, so it answers from recorded responses.
+ */
+export async function ask(question: string, scope: FiType[] = [], turns: Turn[] = []): Promise<QueryResult> {
+  return call<QueryResult>(DEMO ? '/svc/rag/api/query' : '/svc/rag/api/chat', {
     method: 'POST',
-    body: JSON.stringify({ customerId: currentCustomerId(), question, scope: scope.length ? scope : null, history }),
+    body: JSON.stringify({ customerId: currentCustomerId(), question, scope: scope.length ? scope : null, turns }),
   })
 }

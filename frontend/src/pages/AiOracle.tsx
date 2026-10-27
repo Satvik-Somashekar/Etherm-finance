@@ -4,7 +4,7 @@ import { Icon } from '../components/Icon'
 import { Money } from '../components/Money'
 import { premiumBreakdown, premiumTotals } from '../data/mock'
 import { formatCompact } from '../lib/format'
-import { ask, type QueryResult } from '../lib/api'
+import { ask, type QueryResult, type Turn } from '../lib/api'
 import { DEMO, DEMO_QUESTIONS } from '../lib/demo'
 import { useAccounts } from '../state/AccountsContext'
 import { GroundedAnswer } from '../components/GroundedAnswer'
@@ -174,9 +174,12 @@ export function AiOracle() {
       return
     }
 
-    // The earlier questions let a follow-up such as "how can I reduce it?" resolve what "it" is.
-    const history = messages.filter((m) => m.role === 'user').map((m) => m.text).slice(-4)
-    ask(question, scope, history)
+    // The recent conversation lets a follow-up such as "how can I reduce it?" resolve what "it" is.
+    const turns: Turn[] = messages
+      .filter((m) => m.id !== 'intro' && !m.grounded)
+      .slice(-8)
+      .map((m) => ({ role: m.role === 'user' ? 'user' : 'assistant', text: m.text }))
+    ask(question, scope, turns)
       .then((result) =>
         setMessages((prev) => [
           ...prev,

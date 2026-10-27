@@ -142,6 +142,37 @@ public class QueryService {
     private static final Set<Intent> CONTEXT_INTENTS = EnumSet.of(Intent.SPEND_TOTAL, Intent.SPEND_CATEGORY,
             Intent.TOP_EXPENSES, Intent.SPEND_TREND, Intent.TOP_MERCHANTS, Intent.SAVINGS_RATE, Intent.ADVICE);
 
+    /** What running one plan produced: the computed answer, or why it was not run. */
+    record Outcome(ComputedAnswer answer, String declined, int recordsVisible, int recordsMatched) {
+    }
+
+    /**
+     * Runs one structured plan through the same Allow, Find, Add steps as a typed question, including the
+     * section scope. Used by the chat agent, whose plans come from tool calls instead of the parser.
+     */
+    Outcome run(QueryPlan plan, Set<FiType> scope, List<String> consentIds) {
+        if (!scope.isEmpty()) {
+            Set<FiType> usable = new java.util.HashSet<>(naturalTypes(plan));
+            usable.retainAll(scope);
+            if (usable.isEmpty()) {
+                return new Outcome(null, "That is outside the section the customer selected ("
+                        + scope.stream().map(QueryService::sectionName).sorted().collect(Collectors.joining(" and "))
+                        + "), so it was not looked at. They can switch section to ask it.", 0, 0);
+            }
+            plan = narrow(plan, usable);
+        }
+        UpstreamClients.Retrieved found = upstream.retrieve(consentIds, engine.retrievalFilter(plan));
+        return new Outcome(engine.compute(plan, found.records()), null, found.visible(), found.records().size());
+    }
+
+    LocalDate today() {
+        return asOf.get();
+    }
+
+    QuestionParser parser() {
+        return parser;
+    }
+
     /** The FI types an intent reads from; all of them when it does not pick. */
     private Set<FiType> naturalTypes(QueryPlan plan) {
         Set<FiType> types = engine.retrievalFilter(plan).fiTypes();
@@ -234,7 +265,7 @@ public class QueryService {
         return active;
     }
 
-    private static QueryResponse.Citation cite(FinancialRecord r) {
+    static QueryResponse.Citation cite(FinancialRecord r) {
         return new QueryResponse.Citation(r.recordId(), r.accountId(), r.fipId(), r.fiType(), r.date(), r.amount(),
                 r.description(), r.counterparty());
     }
