@@ -18,10 +18,6 @@ interface ChatMessage {
   grounded?: boolean
   /** A live answer from rag-service, with its Java-computed figures and citations. */
   result?: QueryResult
-  /** A marker line shown when the user switches section, not a message. */
-  divider?: boolean
-  /** Suggested questions for the section a divider opens. */
-  examples?: string[]
 }
 
 /** A Knowledge Base section: the account types the Oracle may look at while it is selected. */
@@ -123,13 +119,25 @@ const BAR_COLOUR = ['bg-primary', 'bg-tertiary', 'bg-secondary', 'bg-primary-con
 
 export function AiOracle() {
   const { source } = useAccounts()
-  const [stored, setMessages] = useState<ChatMessage[]>(SEEDED)
-  // With the backend running, the static mock exchange makes way for live answers.
-  const fromLive = (list: ChatMessage[]) => (source === 'live' && list === SEEDED ? [INTRO] : list)
-  const messages = fromLive(stored)
+  const [section, setSection] = useState<Section>(SECTIONS[0])
+  // Each section keeps its own conversation, so switching sections shows that section's chat
+  // instead of mixing topics. With the backend running, the static mock exchange makes way for live answers.
+  const [threads, setThreads] = useState<Record<string, ChatMessage[]>>({})
+  const initialFor = (key: string): ChatMessage[] => {
+    if (source !== 'live') return SEEDED
+    const target = SECTIONS.find((s) => s.key === key)
+    return [
+      key === 'all' || !target
+        ? INTRO
+        : {
+            ...INTRO,
+            text: `This chat is about ${target.label} only. Ask in plain words about it, or ask how you are doing and what to improve. Every figure is computed from your consented records, and each answer lists the records it used.`,
+          },
+    ]
+  }
+  const messages = threads[section.key] ?? initialFor(section.key)
   const [draft, setDraft] = useState('')
   const [thinking, setThinking] = useState(false)
-  const [section, setSection] = useState<Section>(SECTIONS[0])
   const navigate = useNavigate()
   const examples = DEMO ? DEMO_QUESTIONS : section.examples
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -138,27 +146,15 @@ export function AiOracle() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
   }, [messages, thinking])
 
-  function switchSection(next: Section) {
-    if (next.key === section.key) return
-    setSection(next)
-    setMessages((prev) => [
-      ...fromLive(prev),
-      {
-        id: `d-${Date.now()}`,
-        role: 'oracle',
-        divider: true,
-        examples: DEMO ? DEMO_QUESTIONS : next.examples,
-        text: `Context: ${next.label}. From here the Oracle looks only at ${
-          next.scope.length ? 'this section' : 'all your consented accounts'
-        }.`,
-      },
-    ])
-  }
-
   function send(question: string) {
     if (!question || thinking) return
 
-    setMessages((prev) => [...fromLive(prev), { id: `u-${Date.now()}`, role: 'user', text: question }])
+    // Answers land in the conversation they were asked in, even if the section changes meanwhile.
+    const key = section.key
+    const scope = section.scope
+    const setMessages = (update: (prev: ChatMessage[]) => ChatMessage[]) =>
+      setThreads((all) => ({ ...all, [key]: update(all[key] ?? initialFor(key)) }))
+    setMessages((prev) => [...prev, { id: `u-${Date.now()}`, role: 'user', text: question }])
     setDraft('')
     setThinking(true)
 
@@ -180,7 +176,7 @@ export function AiOracle() {
 
     // The earlier questions let a follow-up such as "how can I reduce it?" resolve what "it" is.
     const history = messages.filter((m) => m.role === 'user').map((m) => m.text).slice(-4)
-    ask(question, section.scope, history)
+    ask(question, scope, history)
       .then((result) =>
         setMessages((prev) => [
           ...prev,
@@ -232,7 +228,7 @@ export function AiOracle() {
                   <li key={item.key}>
                     <button
                       type="button"
-                      onClick={() => switchSection(item)}
+                      onClick={() => setSection(item)}
                       aria-pressed={active}
                       className={`group relative flex w-full items-center justify-between overflow-hidden rounded px-4 py-3 text-left text-body-md transition-colors ${
                         active
@@ -341,25 +337,7 @@ export function AiOracle() {
           </div>
 
           {messages.map((message) =>
-            message.divider ? (
-              <div key={message.id} className="flex flex-col items-center gap-3">
-                <span className="rounded-full bg-surface-container-high px-4 py-1 text-label-sm text-on-surface-variant">
-                  {message.text}
-                </span>
-                <div className="flex max-w-4xl flex-wrap justify-center gap-2">
-                  {message.examples?.map((example) => (
-                    <button
-                      key={example}
-                      type="button"
-                      onClick={() => send(example)}
-                      className="rounded-full bg-surface-container-highest px-3 py-1.5 text-left text-label-md text-on-surface-variant transition-colors hover:text-on-surface"
-                    >
-                      {example}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : message.role === 'user' ? (
+            message.role === 'user' ? (
               <div key={message.id} className="mx-auto flex w-full max-w-4xl justify-end">
                 <div className="max-w-[85%] rounded-lg rounded-br-sm bg-surface-container-highest p-5 shadow-md">
                   <p className="text-body-lg text-on-surface">{message.text}</p>
