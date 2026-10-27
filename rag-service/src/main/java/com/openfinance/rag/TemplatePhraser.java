@@ -1,5 +1,6 @@
 package com.openfinance.rag;
 
+import com.openfinance.core.compute.AdviceDomain;
 import com.openfinance.core.compute.ComputedAnswer;
 import com.openfinance.core.compute.Figure;
 import com.openfinance.core.compute.QueryPlan;
@@ -79,6 +80,113 @@ public class TemplatePhraser implements AnswerPhraser {
 
     /** A practical suggestion: the category, a lever specific to it, and the saving a 10% trim would free up. */
     private static String advice(ComputedAnswer answer, FactSheet facts, String period) {
+        return switch (AdviceDomain.of(answer.plan())) {
+            case INSURANCE -> insuranceAdvice(answer, facts);
+            case MUTUAL_FUNDS -> fundAdvice(answer, facts);
+            case EQUITIES -> stockAdvice(answer, facts);
+            case EPF -> epfAdvice(answer, facts);
+            case OVERALL -> overallAdvice(answer, facts);
+            case SPENDING -> spendingAdvice(answer, facts, period);
+        };
+    }
+
+    private static boolean positive(ComputedAnswer answer, String key) {
+        Figure f = answer.figure(key);
+        return f != null && f.value().signum() > 0;
+    }
+
+    private static boolean above(ComputedAnswer answer, String key, String thresholdKey) {
+        Figure f = answer.figure(key);
+        Figure t = answer.figure(thresholdKey);
+        return f != null && t != null && f.value().compareTo(t.value()) > 0;
+    }
+
+    private static String insuranceAdvice(ComputedAnswer answer, FactSheet facts) {
+        StringBuilder s = new StringBuilder("Suggestion: Your policies carry {totalCover} of cover for about {annualPremium} a year "
+                + "in premiums, which is {premiumRate} of the cover. ");
+        if (!positive(answer, "healthCover")) {
+            s.append("I found no health cover, and a single hospital stay can be a large bill, so that is worth a look. ");
+        }
+        if (!positive(answer, "termCover")) {
+            s.append("I found no term life cover; if anyone depends on your income, that is the first gap to check. ");
+        }
+        if (answer.figure("annualIncome") != null) {
+            s.append("Against your yearly salary of {annualIncome}, your term cover is {termMultiple} times your income. "
+                    + "A common starting point is {coverRuleLow} to {coverRuleHigh} times");
+            s.append(positive(answer, "termShortfall")
+                    ? ", so a top-up of roughly {termShortfall} would bring you to the lower end. "
+                    : ", so you are within that range. ");
+            s.append("Premiums take {premiumShare} of your salary.");
+        } else {
+            s.append("This section cannot see your income, so I cannot judge whether the cover is enough. "
+                    + "Switch to All accounts for that.");
+        }
+        return s.toString().trim();
+    }
+
+    private static String fundAdvice(ComputedAnswer answer, FactSheet facts) {
+        StringBuilder s = new StringBuilder("Suggestion: Your mutual funds are worth {total}");
+        if (answer.figure("gain") != null) {
+            s.append(", up {gain} ({gainPct}) on what you put in");
+        } else if (answer.figure("loss") != null) {
+            s.append(", down {loss} ({gainPct}) against what you put in");
+        }
+        s.append(". Your largest scheme, {item1_label}, is {topShare} of the portfolio");
+        boolean concentrated = above(answer, "topShare", "concThreshold");
+        s.append(concentrated
+                ? ", above the {concThreshold} that is often used as a flag for concentration, so check that the tilt is deliberate. "
+                + "Directing new investments to your other schemes, rather than the largest one, is the usual way to even it out. "
+                : ", so no single scheme dominates. ");
+        s.append("By type, {item2_label} funds make up {topTypeShare}. ");
+        if (answer.figure("monthlySip") != null) {
+            s.append("You have been putting in about {monthlySip} a month recently.");
+        }
+        return s.toString().trim();
+    }
+
+    private static String stockAdvice(ComputedAnswer answer, FactSheet facts) {
+        StringBuilder s = new StringBuilder("Suggestion: Your stock portfolio is worth {total} across {count} companies. "
+                + "The largest, {item1_label}, is {topShare} of it");
+        s.append(above(answer, "topShare", "concThreshold")
+                ? ", above the {concThreshold} for a single stock that is often used as a flag, so check that the weight is deliberate. "
+                + "Adding to your smaller holdings or other assets is the usual way to spread the risk. "
+                : ", so no single stock dominates. ");
+        s.append("Your top three together are {topThreeShare}. ");
+        s.append("This is about how spread out your holdings are, not a view on any company.");
+        return s.toString().trim();
+    }
+
+    private static String epfAdvice(ComputedAnswer answer, FactSheet facts) {
+        StringBuilder s = new StringBuilder("Suggestion: Your EPF balance is {balance}. ");
+        if (answer.figure("monthlyContribution") != null) {
+            s.append("You and your employer add about {monthlyContribution} a month, {yearlyContribution} a year, "
+                    + "so in a year it would be around {balanceInYear} before interest. ");
+        }
+        if (answer.figure("interestYear") != null) {
+            s.append("Interest credited recently was {interestYear}. ");
+        }
+        if (answer.figure("employerShare") != null) {
+            s.append("Your employer's side makes up {employerShare} of the balance. ");
+        }
+        s.append("Because contributions follow your salary, raising them is a trade-off against your monthly cash needs, "
+                + "and it is worth deciding on purpose.");
+        return s.toString().trim();
+    }
+
+    private static String overallAdvice(ComputedAnswer answer, FactSheet facts) {
+        StringBuilder s = new StringBuilder("Suggestion: Your net worth is {netWorth}, with most of it in {item1_label} ({item1_value}). ");
+        if (answer.figure("runwayMonths") != null) {
+            s.append("Your savings accounts would cover about {runwayMonths} months of your spending. Many people aim for around {emergencyRule} months");
+            s.append(above(answer, "emergencyRule", "runwayMonths")
+                    ? ", so building that cushion first is a sensible next step."
+                    : ", so you have that cushion covered and can look at where the rest should work harder.");
+        } else {
+            s.append("I could not see enough spending to judge your emergency cushion.");
+        }
+        return s.toString().trim();
+    }
+
+    private static String spendingAdvice(ComputedAnswer answer, FactSheet facts, String period) {
         QueryPlan plan = answer.plan();
         Category category = plan.categories().iterator().next();
         boolean fixed = "FIXED".equals(plan.subject());
