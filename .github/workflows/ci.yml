@@ -1,0 +1,110 @@
+# Build, tests, the accuracy evaluation, the red-team suites and supply-chain checks on every push and PR.
+# Every action is pinned to a full commit SHA (the tag is in the comment) so a moved tag cannot change what runs;
+# Dependabot proposes updates. The workflow can only read the repository.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    name: Secret scan (whole history)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 scripts/test_secret_scan.py
+      - run: python3 scripts/secret-scan.py --history
+
+  backend:
+    name: Backend build, tests and evaluation
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      # verify runs the enforcer rules (pinned plugins, banned libraries, converging versions) and every test,
+      # including RedTeamTest; -Psbom also writes the CycloneDX bill of materials.
+      - run: mvn -B -ntp -Psbom verify
+      - name: Generate the synthetic data
+        run: mvn -B -ntp -q -pl data-generator exec:java -Dexec.args="--users 5 --seed 42 --out $PWD/data/synthetic"
+      - name: Start the services
+        run: |
+          ETHERM_SEED_DIR=$PWD/data/synthetic nohup java -jar ingestion/target/ingestion-0.0.1-SNAPSHOT.jar > ingestion.log 2>&1 &
+          nohup java -jar normalization/target/normalization-0.0.1-SNAPSHOT.jar > normalization.log 2>&1 &
+          nohup java -jar retrieval/target/retrieval-0.0.1-SNAPSHOT.jar > retrieval.log 2>&1 &
+          ETHERM_AS_OF=2026-10-25 nohup java -jar rag-service/target/rag-service-0.0.1-SNAPSHOT.jar > rag-service.log 2>&1 &
+          for i in $(seq 1 90); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' localhost:8084/api/query -H 'Content-Type: application/json' \
+              -d '{"customerId":"user001@etherm-aa","question":"What is my balance?"}' || true)
+            [ "$code" = "200" ] && exit 0
+            sleep 2
+          done
+          tail -n 50 *.log
+          exit 1
+      - name: Accuracy evaluation
+        run: python3 evaluation/evaluate.py --out "$RUNNER_TEMP/eval"
+      - name: Live red-team
+        run: python3 evaluation/redteam.py --out "$RUNNER_TEMP/eval"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: backend-reports
+          path: |
+            ${{ runner.temp }}/eval/*.md
+            rag-service/target/redteam-report.md
+            target/classes/META-INF/sbom/application.cdx.json
+          if-no-files-found: ignore
+
+  frontend:
+    name: Frontend lint, build and audit
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      # npm ci installs exactly what the lockfile says and checks each package's integrity hash.
+      - run: npm ci
+      - run: npm audit --audit-level=high
+      - run: npm run lint
+      - run: npm run build
+      - run: npm run build:demo
+      - run: npm sbom --sbom-format cyclonedx --omit dev > "$RUNNER_TEMP/frontend.cdx.json"
+
+  dependency-review:
+    name: New dependencies
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      # Fails a PR that adds a dependency with a known high-severity vulnerability or a copyleft licence.
+      - uses: actions/dependency-review-action@da24556b548a50705dd671f47852072ea4c105d9 # v4.7.1
+        with:
+          fail-on-severity: high
+          deny-licenses: GPL-2.0, GPL-3.0, AGPL-3.0

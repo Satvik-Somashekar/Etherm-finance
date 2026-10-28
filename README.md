@@ -88,6 +88,7 @@ ETHERM_AS_OF=2026-10-25 java -jar rag-service/target/rag-service-0.0.1-SNAPSHOT.
 | `ANTHROPIC_API_KEY` | | Required when `ETHERM_PHRASING=claude` |
 | `GEMINI_API_KEY` | | Required when `ETHERM_PHRASING=gemini` |
 | `ETHERM_GEMINI_MODEL` | `gemini-3.5-flash` | Gemini model used for phrasing |
+| `ETHERM_TURN_KEY` | made at start-up | Base64 key (32 bytes or more) that signs answers, so earlier turns can be checked; set it to keep conversations valid across restarts |
 
 ### Try it
 
@@ -176,6 +177,27 @@ model key those questions take the template path, so the live suite should be re
 These tests show the layers hold against the payloads written here, not against every attack: the name
 filter is a keyword list, and the checks on replies are what the guarantee rests on.
 
+### Supply chain and credentials
+
+- `python3 scripts/secret-scan.py` checks every tracked file for API keys, tokens, private keys and
+  passwords (`--history` checks every version ever committed; `--staged` is what the pre-commit hook runs).
+  Enable the hook once per clone with `git config core.hooksPath .githooks`.
+- Maven fails the build on an unpinned plugin, diverging dependency versions or a library with a known
+  critical flaw (Log4Shell, Text4Shell, commons-collections gadgets). `mvn -Psbom package` writes a
+  CycloneDX bill of materials; `npm --prefix frontend sbom --sbom-format cyclonedx` does the same for the
+  frontend.
+- Frontend versions are exact and `npm audit` reports no known vulnerabilities (Vite was raised from 8.2.2 to
+  8.3.5 for six advisories on its dev server).
+- `.github/workflows/ci.yml` runs the secret scan over the whole history, the backend build and tests, the
+  accuracy evaluation and both red-team suites against running services, and the frontend lint, build and
+  audit. Actions are pinned to commit SHAs and the workflow can only read the repository. Dependabot proposes
+  updates weekly.
+- The container image is pinned by digest and runs as a non-root user with a read-only filesystem and no
+  capabilities; compose publishes ports on 127.0.0.1 only. The Docker changes were not built here (no Docker
+  daemon in this environment).
+
+See [SECURITY.md](SECURITY.md) for how to report a problem.
+
 ## Frontend
 
 `frontend/` is a Vite, React and TypeScript app built on the Etherm Lumina design system in
@@ -224,6 +246,6 @@ behaviour.
 
 - No live Account Aggregator, FIP or consent-manager integration; payloads are unencrypted.
 - No embeddings or vector search (see above).
-- No CI pipeline.
+- CI is defined in `.github/workflows/ci.yml`; its first runs are on the draft PRs, so treat it as new.
 - No persistence: the services keep data in memory and reload the synthetic data on restart.
 - No authentication: any caller can query any synthetic customer.

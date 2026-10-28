@@ -12,3 +12,15 @@ dist/
 # evaluation run output; REPORT.md and BASELINE.md are kept
 evaluation/results/results.json
 __pycache__/
+
+# credentials never belong in the repository (see scripts/secret-scan.py)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+secrets/
