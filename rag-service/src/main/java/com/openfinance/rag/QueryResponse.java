@@ -13,6 +13,8 @@ import java.util.List;
  * @param answer   the sentence; display text only
  * @param figures  the authoritative numbers, computed in Java. A UI shows figures from here, never
  *                 parsed out of {@code answer}
+ * @param turnSignature proves this answer came from the service, for the given customer; a client sends it back
+ *                 with the answer as an earlier turn of the conversation (see {@link TurnSigner})
  */
 public record QueryResponse(
         String question,
@@ -24,7 +26,18 @@ public record QueryResponse(
         List<BreakdownItem> breakdown,
         List<Citation> citations,
         Grounding grounding,
-        Export export) {
+        Export export,
+        String turnSignature) {
+
+    public QueryResponse(String question, String answer, String phrasedBy, Intent intent, Period period, List<Figure> figures,
+                         List<BreakdownItem> breakdown, List<Citation> citations, Grounding grounding, Export export) {
+        this(question, answer, phrasedBy, intent, period, figures, breakdown, citations, grounding, export, null);
+    }
+
+    public QueryResponse withTurnSignature(String signature) {
+        return new QueryResponse(question, answer, phrasedBy, intent, period, figures, breakdown, citations, grounding, export,
+                signature);
+    }
 
     /**
      * Present when the question asked for a file. The client downloads it from the customer's export

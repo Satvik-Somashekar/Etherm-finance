@@ -34,8 +34,10 @@ public final class FactSheet {
         }
         List<BreakdownItem> items = answer.breakdown();
         for (int i = 0; i < Math.min(items.size(), 5); i++) {
-            s.put("item" + (i + 1) + "_value", Inr.format(items.get(i).value()), "value of: " + items.get(i).label());
-            s.values.put("item" + (i + 1) + "_label", items.get(i).label());
+            // Item names can be payees from a statement, so a model only ever sees the cleaned form.
+            String label = UntrustedText.label(items.get(i).label());
+            s.put("item" + (i + 1) + "_value", Inr.format(items.get(i).value()), "value of: " + label);
+            s.values.put("item" + (i + 1) + "_label", label);
         }
         return s;
     }

@@ -72,6 +72,11 @@ public class QuestionParser {
         if (advice != null) {
             return advice;
         }
+        // Tax planning and anything about hiding money are out of scope: answering with an income figure would look like help.
+        if (has(q, " hide ", " hiding ", "evade", "evasion", "launder", "black money", "undeclared")
+                || has(q, " tax") && has(q, "how ", " file ", "filing", "return", " save", "saving", "claim", "deduct", "regime", "slab", "avoid")) {
+            return QueryPlan.of(Intent.UNSUPPORTED);
+        }
         // Forecasts and recommendations on investments are out of scope: answering them with a balance would look like a recommendation.
         if (has(q, " should i ", " should we ", " good time ", " will ", " going to ", " predict", " forecast",
                 " recommend", " advice", " advise", " best ")) {

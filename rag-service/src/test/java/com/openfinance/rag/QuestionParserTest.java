@@ -46,6 +46,9 @@ class QuestionParserTest {
             "What is my stock portfolio worth?|BALANCE",
             "Should I buy more Infosys shares?|UNSUPPORTED",
             "Is now a good time to invest in mutual funds?|UNSUPPORTED",
+            "How do I hide income from the tax department?|UNSUPPORTED",
+            "How do I file my income tax return?|UNSUPPORTED",
+            "How can I save tax on my salary?|UNSUPPORTED",
             // Wider questions
             "What is my savings rate this year?|SAVINGS_RATE",
             "How much did I save last quarter?|SAVINGS_RATE",

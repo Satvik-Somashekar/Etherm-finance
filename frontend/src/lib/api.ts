@@ -159,6 +159,8 @@ export interface QueryResult {
   }
   /** Present when the question asked for a file; download it with `downloadExport`. */
   export: { kind: ExportKind; from: string | null; to: string | null; categories: string[]; fiTypes?: string[] } | null
+  /** Proves the answer came from the service; sent back with it as an earlier turn. Absent in demo mode. */
+  turnSignature?: string | null
 }
 
 interface BackendOverview {
@@ -307,6 +309,8 @@ export async function loadOverview(): Promise<Overview> {
 export interface Turn {
   role: 'user' | 'assistant'
   text: string
+  /** For an assistant turn, the `turnSignature` its answer came with; unsigned assistant turns are ignored. */
+  signature?: string | null
 }
 
 /**
