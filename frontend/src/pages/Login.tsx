@@ -5,9 +5,12 @@ import { DEMO_USERS, type DemoUser } from '../lib/session'
 import { useAuth } from '../state/AuthContext'
 import { DEMO } from '../lib/demo'
 
+// Presentation build: the shared demo passcode is sent for you, so choosing a customer is all it takes.
+// The services still check it; set VITE_DEMO_PASSCODE if they were started with ETHERM_DEMO_PASSCODE.
+const PASSCODE = import.meta.env.VITE_DEMO_PASSCODE ?? 'etherm-demo'
+
 export function Login() {
   const { login } = useAuth()
-  const [passcode, setPasscode] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -15,7 +18,7 @@ export function Login() {
     setBusy(user.id)
     setError(null)
     try {
-      await login(user, passcode)
+      await login(user, PASSCODE)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Sign-in failed.')
     } finally {
@@ -36,18 +39,6 @@ export function Login() {
             Choose a demo customer. Each has their own accounts, consents and transactions. All of
             them are fictional.
           </p>
-          {!DEMO && (
-            <label className="mb-5 block">
-              <span className="mb-2 block text-label-md text-on-surface">Passcode</span>
-              <input
-                type="password"
-                autoComplete="current-password"
-                value={passcode}
-                onChange={(e) => setPasscode(e.target.value)}
-                className="w-full rounded-xl border border-outline-variant/30 bg-surface-container/60 px-4 py-3 text-body-md text-on-surface outline-none focus:border-primary/50"
-              />
-            </label>
-          )}
           {error && (
             <p role="alert" className="mb-4 rounded-xl border border-error/30 bg-error/10 p-3 text-label-md text-error">
               {error}
@@ -81,7 +72,7 @@ export function Login() {
           <p className="mt-6 text-label-sm text-on-surface-variant opacity-70">
             {DEMO
               ? 'This is demo mode: the data and answers were recorded from the real services, so no passcode is needed.'
-              : 'Every demo customer shares one passcode, etherm-demo, unless the services were started with ETHERM_DEMO_PASSCODE. The services give back a token that only works for the customer you choose.'}
+              : 'The demo passcode is sent for you. The services give back a token that only works for the customer you choose.'}
           </p>
         </GlassCard>
       </div>
