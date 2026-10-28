@@ -14,7 +14,7 @@ Please do not open a public issue for a security problem. Use GitHub's private v
 | --- | --- | --- |
 | Prompt injection | Payee names cleaned and withheld when they read like instructions; replies refused if they carry their own numbers, amounts in words, links or markup; earlier turns signed | `UntrustedText`, `ChatService`, `TurnSigner`, `RedTeamTest`, `evaluation/redteam.py` |
 | Credentials | Keys only in environment variables; a scanner checks every file, every commit (pre-commit hook) and the whole history (CI) | `scripts/secret-scan.py`, `.githooks/pre-commit` |
-| Dependencies | Exact versions; lockfile installs with integrity hashes; Maven enforcer bans unpinned plugins, diverging versions and known-bad libraries; `npm audit` and dependency review on every PR; Dependabot weekly | `pom.xml`, `frontend/.npmrc`, `.github/` |
+| Dependencies | Exact versions; lockfile installs with integrity hashes; Maven enforcer bans unpinned plugins, diverging versions and known-bad libraries; `npm audit` on every PR; Dependabot weekly | `pom.xml`, `frontend/.npmrc`, `.github/` |
 | Build | CI actions pinned to commit SHAs with read-only permissions; base image pinned by digest; CycloneDX bills of materials for backend and frontend | `.github/workflows/ci.yml`, `Dockerfile` |
 | Containers | Non-root user, read-only filesystem, no capabilities, no privilege escalation, ports bound to localhost | `Dockerfile`, `docker-compose.yml` |
 
