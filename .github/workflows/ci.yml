@@ -74,6 +74,18 @@ jobs:
         run: python3 evaluation/evaluate.py --out "$RUNNER_TEMP/eval"
       - name: Live red-team
         run: python3 evaluation/redteam.py --out "$RUNNER_TEMP/eval"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+      - name: Edge forecast backtest (dev and held-out customers)
+        run: |
+          for set in "42 data" "7 heldout"; do
+            read -r seed dir <<< "$set"
+            mvn -B -ntp -q -pl fi-core -am test -Dtest=ForecastBacktestData -Dsurefire.failIfNoSpecifiedTests=false \
+              -Detherm.backtest.seed=$seed -Detherm.backtest.out=$PWD/evaluation/forecast/$dir
+          done
+          node evaluation/forecast/backtest.ts --out "$RUNNER_TEMP/eval"
+          node evaluation/forecast/backtest.ts --set held-out --out "$RUNNER_TEMP/eval"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:

@@ -2,7 +2,7 @@ import type { ConsentArtifact, FipAccount, FiType, Insight, Transaction } from '
 import type { FipCandidate } from '../data/mock'
 import { currentCustomerId, currentToken, SIGNED_OUT_EVENT } from './session'
 import { ApiError } from './errors'
-import { DEMO, demoCall } from './demo'
+import { DEMO, demoCall, demoTransactions } from './demo'
 
 /**
  * Typed client for the Etherm backend, reached through the Vite proxy (see vite.config.ts).
@@ -125,6 +125,19 @@ export async function downloadExport(
   link.click()
   link.remove()
   URL.revokeObjectURL(url)
+}
+
+/**
+ * The customer's bank transactions as the transactions CSV, for forecasting on this device. Same consent-bounded
+ * export as the download, limited to deposit accounts; in the public demo, the recorded export.
+ */
+export async function loadBankTransactions(): Promise<string> {
+  if (DEMO) return demoTransactions()
+  const path = `/svc/rag/api/customers/${encodeURIComponent(currentCustomerId())}/export/transactions.csv?fiType=DEPOSIT`
+  const response = await fetch(path, { headers: authHeaders() })
+  checkSession(response)
+  if (!response.ok) throw new ApiError(response.status, response.statusText)
+  return response.text()
 }
 
 // ------------------------------------------------------------------ backend shapes

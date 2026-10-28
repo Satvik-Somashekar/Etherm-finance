@@ -17,6 +17,8 @@ interface Recording {
   fips: unknown[]
   overview: unknown
   answers: Record<string, unknown>
+  /** The bank-account transactions export, for the on-device forecast. */
+  transactions?: string
 }
 
 const recordings = new Map<string, Promise<Recording>>()
@@ -48,6 +50,15 @@ const inactiveFor = (customerId: string) => {
     inactive.set(customerId, set)
   }
   return set
+}
+
+/** The recorded bank transactions, or none once the bank's consent is revoked in this session. */
+export async function demoTransactions(): Promise<string> {
+  const customerId = currentCustomerId()
+  const recording = await load(customerId)
+  const bank = recording.accounts.find((a) => a.account.fipId.includes('BANK'))
+  if (!recording.transactions || !bank || inactiveFor(customerId).has(bank.account.fipId)) return ''
+  return recording.transactions
 }
 
 export async function demoCall<T>(path: string, init?: RequestInit): Promise<T> {
