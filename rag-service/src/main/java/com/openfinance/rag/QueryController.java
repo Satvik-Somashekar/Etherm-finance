@@ -32,9 +32,12 @@ public class QueryController {
     private final OverviewService overviews;
     private final ExportService exports;
     private final ChatService chat;
+    private final TurnSigner signer;
 
-    public QueryController(QueryService service, OverviewService overviews, ExportService exports, ChatService chat) {
+    public QueryController(QueryService service, OverviewService overviews, ExportService exports, ChatService chat,
+                           TurnSigner signer) {
         this.chat = chat;
+        this.signer = signer;
         this.service = service;
         this.overviews = overviews;
         this.exports = exports;
@@ -42,13 +45,17 @@ public class QueryController {
 
     @PostMapping("/query")
     public QueryResponse query(@RequestBody QueryRequest request) {
-        return service.answer(request);
+        return signed(service.answer(request), TurnSigner.principal(request.customerId(), request.consentIds()));
     }
 
     /** Free conversation: the model looks figures up through tools when one is configured, else the typed-question path answers. */
     @PostMapping("/chat")
     public QueryResponse chat(@RequestBody ChatRequest request) {
-        return chat.chat(request);
+        return signed(chat.chat(request), TurnSigner.principal(request.customerId(), request.consentIds()));
+    }
+
+    private QueryResponse signed(QueryResponse response, String principal) {
+        return response.withTurnSignature(signer.sign(principal, response.answer()));
     }
 
     @GetMapping("/customers/{customerId}/overview")

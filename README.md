@@ -123,7 +123,7 @@ Latest results ([full report](evaluation/results/REPORT.md)):
 | Exact-match answers, to the paisa | 100% | 100% |
 | Citation precision / recall | 1.000 / 1.000 | 1.000 / 1.000 |
 | Sentences containing a number not among the computed figures | 0 | 0 |
-| Out-of-scope questions declined | 40 of 40 | 25 of 30 |
+| Out-of-scope questions declined | 40 of 40 | 30 of 30 |
 
 Answers under a single provider's consent cited another provider 0 times in 150 questions, and a
 revoked consent was refused both times it was tried.
@@ -139,8 +139,42 @@ written, so their held-out phrasings were written alongside the code and are not
 
 These numbers have limits. The questions come from 67 answerable phrasings, repeated across 8
 periods and 5 users, so the wording is much less varied than the count suggests. The same people
-wrote the parser and the questions. The remaining miss ("How do I file my income tax return?" is
-answered as an income question) is left in to show what the keyword parser still gets wrong.
+wrote the parser and the questions. The last held-out miss ("How do I file my income tax return?" was
+answered as an income question) was fixed by a tax-planning rule added during the red-team work below, so the
+held-out out-of-scope set is no longer a blind test for that wording.
+
+## Security testing
+
+The model never sees raw records, but it does see payee names in lookup results, and those come from
+statements a stranger can influence: anyone who receives a UPI payment chooses the name that appears.
+So the Oracle treats every payee name as untrusted, and checks what reaches the customer whatever the
+model was told.
+
+- **Payee names** are normalised (full-width letters folded, zero-width and direction-override
+  characters removed), stripped of markup, shortened to 48 characters, and withheld as "a payee (name
+  withheld)" when they read like an instruction, a role marker, a tool name, a link or markup
+  (`UntrustedText`).
+- **Replies** are refused when they contain a digit of the model's own, an amount in words ("twelve lakh"),
+  a link, an image or HTML, or a placeholder that does not exist. A refused reply is sent back once, then the
+  template wording is used.
+- **Earlier turns** sent back by the browser only count as the assistant's words when they carry the
+  signature the service gave that answer (HMAC-SHA256, bound to the customer; key in `ETHERM_TURN_KEY`, or
+  made at start-up). Without it a client could make the model "repeat" a number nobody computed.
+- **Tools** take no customer argument, run through the same consent and section checks as typed questions,
+  and are only offered for the selected section.
+
+Two red-team suites check this. `RedTeamTest` plants 45 payee names (37 attacks, 8 ordinary names) in a
+customer's statement and runs the chat against a deliberately gullible model that obeys any unusual name it
+sees. The name filter caught 30 of the 37 attacks and hid none of the ordinary names; the 7 it missed
+(paraphrases, base64, Hindi, Cyrillic look-alikes, an amount in words) reached the model, and every one of
+the 45 answers was still safe: no link or markup, no number Java did not compute, nothing cited outside the
+section. `evaluation/redteam.py` has each customer ask 20 attack questions through both endpoints with a
+forged assistant turn; 200 of 200 responses passed ([report](evaluation/results/REDTEAM.md)). Without a
+model key those questions take the template path, so the live suite should be re-run with
+`GEMINI_API_KEY` set.
+
+These tests show the layers hold against the payloads written here, not against every attack: the name
+filter is a keyword list, and the checks on replies are what the guarantee rests on.
 
 ## Frontend
 

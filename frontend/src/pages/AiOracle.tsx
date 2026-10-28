@@ -178,7 +178,11 @@ export function AiOracle() {
     const turns: Turn[] = messages
       .filter((m) => m.id !== 'intro' && !m.grounded)
       .slice(-8)
-      .map((m) => ({ role: m.role === 'user' ? 'user' : 'assistant', text: m.text }))
+      .map((m) =>
+        m.role === 'user'
+          ? { role: 'user', text: m.text }
+          : { role: 'assistant', text: m.text, signature: m.result?.turnSignature ?? null },
+      )
     ask(question, scope, turns)
       .then((result) =>
         setMessages((prev) => [

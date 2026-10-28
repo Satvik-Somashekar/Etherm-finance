@@ -18,14 +18,14 @@ Read these numbers with their limits. The questions come from 67 answerable phra
 | Citation precision (mean) | 1.000 | 1.000 |
 | Citation recall (mean) | 1.000 | 1.000 |
 | Sentences with a number not among the computed figures | 0 of 1380 | 0 of 705 |
-| Out-of-scope questions declined | 100.0% of 40 | 83.3% of 30 |
+| Out-of-scope questions declined | 100.0% of 40 | 100.0% of 30 |
 
 | Consent and runtime checks | Result |
 | --- | --- |
 | Single-consent answers citing another provider | 0 of 150 |
 | Requests under a single consent that failed | 0 of 150 |
 | Revoked consent refused with 403 | 2 of 2 |
-| Latency p50 / p95 (local) | 37 ms / 85 ms over 2309 requests |
+| Latency p50 / p95 (local) | 24 ms / 50 ms over 2309 requests |
 
 ## By expected intent (both sets)
 
@@ -51,4 +51,4 @@ None.
 
 ## Out-of-scope questions that were answered
 
-- (held-out) "How do I file my income tax return?" was read as INCOME: "You received ₹12,00,000.00 in salary over the period you have shared across 12 credits."
+None.

@@ -132,13 +132,14 @@ public class ClaudePhraser implements AnswerPhraser {
         return sb.toString().trim();
     }
 
-    /** No digits of the model's own, and every placeholder it wrote is one we can fill. */
+    /** No digits or amounts in words of the model's own, no link or markup, and every placeholder it wrote is one we can fill. */
     static boolean isSafe(String draft, FactSheet facts, ComputedAnswer answer) {
         int limit = answer.plan().intent() == com.openfinance.core.compute.Intent.ADVICE ? 900 : 600;
         if (draft.isBlank() || draft.length() > limit) {
             return false;
         }
-        if (DIGIT.matcher(facts.stripPlaceholders(draft)).find()) {
+        String bare = facts.stripPlaceholders(draft);
+        if (DIGIT.matcher(bare).find() || ChatService.NUMBER_WORDS.matcher(bare).find() || UntrustedText.hasLinkOrMarkup(draft)) {
             return false;
         }
         return !PLACEHOLDER.matcher(facts.fill(draft)).find();
