@@ -4,6 +4,7 @@ import { GlassCard } from '../components/GlassCard'
 import { Icon } from '../components/Icon'
 import { Money } from '../components/Money'
 import { Sparkline } from '../components/Sparkline'
+import { ForecastCard } from '../components/ForecastCard'
 import { insights as mockInsights, netWorthSeries, transactions as mockTransactions } from '../data/mock'
 import { useAccounts } from '../state/AccountsContext'
 import { FI_TYPE_ICON, FI_TYPE_LABEL, type FiType } from '../types/fi'
@@ -68,6 +69,11 @@ export function Dashboard() {
     if (!first) return 0
     return ((series[series.length - 1].value - first) / first) * 100
   }, [series])
+
+  const bankBalance = useMemo(() => {
+    const banks = linked.filter((a) => a.fiType === 'DEPOSIT')
+    return banks.length ? banks.reduce((sum, a) => sum + a.balance, 0) : null
+  }, [linked])
 
   const allocation = useMemo(() => {
     if (netWorth === 0) return []
@@ -261,6 +267,9 @@ export function Dashboard() {
             </Link>
           </div>
         </div>
+
+        {/* Live mode only: the forecast runs on the customer's real (consent-bounded) transactions, never on mock data. */}
+        {source === 'live' && <ForecastCard bankBalance={bankBalance} consentKey={consentKey} />}
       </section>
     </div>
   )

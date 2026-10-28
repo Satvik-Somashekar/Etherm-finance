@@ -24,6 +24,12 @@ async function json(url, init = {}) {
   return res.json()
 }
 
+async function text(url) {
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) throw new Error(`${res.status} ${url}`)
+  return res.text()
+}
+
 mkdirSync(out, { recursive: true })
 for (let n = 1; n <= 5; n++) {
   const id = `user${String(n).padStart(3, '0')}@etherm-aa`
@@ -40,6 +46,8 @@ for (let n = 1; n <= 5; n++) {
     fips: await json(`${base.ingestion}/api/customers/${enc}/fips`),
     overview: await json(`${base.rag}/api/customers/${enc}/overview`),
     answers: {},
+    // Bank transactions only, for the forecast the browser computes.
+    transactions: await text(`${base.rag}/api/customers/${enc}/export/transactions.csv?fiType=DEPOSIT`),
   }
   for (const question of questions) {
     const { turnSignature, ...answer } = await json(`${base.rag}/api/query`, {

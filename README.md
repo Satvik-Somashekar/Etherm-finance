@@ -27,7 +27,8 @@ The read path is **Allow → Find → Add → Phrase**:
    the computed figures. By default a template writes it. Optionally Claude writes it, but it only
    sees placeholder names, and a draft containing any digit is rejected in favour of the template.
 
-The language model never does arithmetic and never sees the amounts. This follows the
+The language model never does arithmetic and never sees the amounts. (The one figure computed outside Java is the
+Dashboard's forecast, which runs in the browser; see Edge forecasting.) This follows the
 retrieve-then-compute approach motivated by numerical QA work such as FinQA and TAT-QA, on top of
 retrieval-augmented generation (Lewis et al., 2020).
 
@@ -156,6 +157,62 @@ wrote the parser and the questions. The last held-out miss ("How do I file my in
 answered as an income question) was fixed by a tax-planning rule added during the red-team work below, so the
 held-out out-of-scope set is no longer a blind test for that wording.
 
+## Edge forecasting
+
+The Dashboard's forecast card predicts next month's spending by category, the regular payments due and the bank
+balance at the end of the month. It runs in the browser, in a Web Worker, on the bank transactions the customer's
+consents share (the same consent-bounded transactions export, limited to deposit accounts). The transactions are
+held in memory while the forecast runs and then dropped: nothing is stored on the device and nothing is sent back.
+This is the one place numbers are computed outside Java, by design, so that forecasting never needs raw history on
+a server. The forecast is arithmetic, not a model: no language model sees it, and the Oracle does not phrase it.
+
+The code (`frontend/src/forecast/`, no dependencies) climbs a ladder and keeps a rung only if it helps:
+
+| Rung | What it does | In the app |
+| --- | --- | --- |
+| 1. Baselines | Mean, last month, 3-month average and same month last year, picked per series by the smallest error over the last 12 months (each forecast made only from the months before it); a later model must be 10% better to replace an earlier one | Yes |
+| 2. Smoothing | Simple exponential smoothing, damped trend and additive seasonal smoothing, parameters grid-searched | No: built and backtested, but it did not beat the baselines on the synthetic data |
+| 3. Recurring payments | A payee paid the same amount (within 5%) at a steady monthly, quarterly or yearly rhythm is projected to its next date; only the rest of the spending is forecast by rungs 1 and 2 | Yes |
+| 4. Reconciliation | The total is forecast on its own too, and the categories are moved toward it in proportion to their error variance, so they add up | Yes |
+| 5. 80% ranges | Split-conformal: the whole pipeline is re-run on up to 12 earlier months and its errors set the width | Yes |
+
+`evaluation/forecast/backtest.ts` runs it on 30 synthetic customers over three years (written by fi-core
+`ForecastBacktestData` with the real normaliser), forecasting every month that has six months before it from the
+earlier months only. Settings were chosen on one set (seed 42) and checked on another the choices never saw
+(seed 7):
+
+```bash
+mvn -q -pl fi-core -am test -Dtest=ForecastBacktestData -Dsurefire.failIfNoSpecifiedTests=false \
+    -Detherm.backtest.out=$PWD/evaluation/forecast/data
+mvn -q -pl fi-core -am test -Dtest=ForecastBacktestData -Dsurefire.failIfNoSpecifiedTests=false \
+    -Detherm.backtest.seed=7 -Detherm.backtest.out=$PWD/evaluation/forecast/heldout
+node evaluation/forecast/backtest.ts && node evaluation/forecast/backtest.ts --set held-out
+```
+
+Held-out results, 900 customer-months ([full report](evaluation/results/FORECAST_HELDOUT.md),
+[dev set](evaluation/results/FORECAST.md)). MASE below 1 beats repeating last month.
+
+| | Total spending MASE / wMAPE | Category MASE / wMAPE | Net flow MASE |
+| --- | --- | --- | --- |
+| Last month | 1.04 / 11.9% | 1.03 / 16.3% | 1.11 |
+| Mean of all months | 0.75 / 8.5% | 0.81 / 13.4% | 0.81 |
+| Rung 1 alone | 0.68 / 7.6% | 0.78 / 10.4% | 0.87 |
+| What the app runs (1, 3, 4) | 0.70 / 7.8% | 0.79 / 10.8% | 0.83 |
+
+- The 80% ranges held the actual figure 86.8% of the time for total spending, 82.1% for categories and 85.1% for
+  net flow. With fewer than 12 months of history, coverage on the dev set fell to about 75%.
+- Every one of 2,160 predicted payments was paid on the predicted date (within 3 days) at the predicted amount
+  (within 1%), and 96% of payments to recognised payees were predicted. A yearly payment needs two occurrences
+  before it is recognised, so the first renewal of each insurance premium is missed.
+- One forecast, including the 12 calibration re-runs, took about 5 ms (median) and 12 ms (95th percentile) in Node
+  on one thread, and about 20 to 30 ms in the browser for a customer with 12 months of history. The worker is 8 KB.
+
+What this does and does not show: the synthetic customers spend a random share of a fixed salary each month with
+no trend, festivals or life events, so a plain mean is hard to beat and rungs 3 and 4 add little accuracy on top of
+rung 1. They earn their place by giving payment dates, categories that add up and a better net-flow forecast than
+rung 1. Real spending is messier; these figures show the code is correct and cheap, not how accurate it will be
+for real customers.
+
 ## Security testing
 
 The model never sees raw records, but it does see payee names in lookup results, and those come from
@@ -246,7 +303,7 @@ See [SECURITY.md](SECURITY.md) for how to report a problem.
 | `/accounts` | Linked Accounts | Live: accounts, balances and sync time come from the services. Linking a provider creates and approves a consent; removing one revokes it. The Export card downloads transactions and a monthly report as CSV |
 | `/oracle` | AI Oracle | Live: questions go to `POST /api/query`, and answers show figures, a breakdown and record citations |
 | `/consent` | Consent & Security | Live consent ledger for the signed-in customer |
-| `/` | Dashboard | Live: net worth, allocation, a 12-month history rebuilt from transactions at today's prices (market moves are not reflected), recent activity, and three insights answered by the same pipeline as the Oracle (`GET /api/customers/{id}/overview`) |
+| `/` | Dashboard | Live: net worth, allocation, a 12-month history rebuilt from transactions at today's prices (market moves are not reflected), recent activity, three insights answered by the same pipeline as the Oracle (`GET /api/customers/{id}/overview`), and next month's forecast computed in the browser (see Edge forecasting) |
 
 Sign-in lists the five synthetic customers and asks for the demo passcode, which ingestion checks
 before issuing a token (see Security testing). The token is kept in sessionStorage, sent with every
@@ -270,8 +327,9 @@ months. The Oracle can also produce them: "Export my grocery transactions for la
 calling the services, so it can be hosted anywhere (`frontend/vercel.json` has the Vercel settings).
 The recordings in `frontend/public/demo/` were captured from the real services by
 `npm --prefix frontend run record-demo` (services up, `ETHERM_AS_OF=2026-10-25`): accounts,
-providers, the Dashboard overview, and answers to the 18 questions in `frontend/src/demo/questions.json`
-for each of the five customers. Nothing is computed in the browser.
+providers, the Dashboard overview, the bank transactions export, and answers to the 18 questions in
+`frontend/src/demo/questions.json` for each of the five customers. The only thing computed in the browser is the
+Dashboard forecast, from the recorded transactions, exactly as in live mode.
 
 Limits: only those 18 questions are answered; other questions get a message saying so. Revoking a
 consent works in the session (the account disappears and Oracle answers stop until it is linked
@@ -287,5 +345,7 @@ behaviour.
 - No embeddings or vector search (see above).
 - CI is defined in `.github/workflows/ci.yml`; its first runs are on the draft PRs, so treat it as new.
 - No persistence: the services keep data in memory and reload the synthetic data on restart.
+- The forecast is checked only on synthetic customers, whose spending has no trend or seasons, and the
+  transactions it fetches are not encrypted on the device beyond what the browser does for page memory.
 - No real identity: every synthetic customer signs in with one shared demo passcode. The token checks
   that follow are real; the passcode is a stand-in for an identity provider.
