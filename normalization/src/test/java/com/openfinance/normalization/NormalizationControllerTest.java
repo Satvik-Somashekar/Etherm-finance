@@ -25,6 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(properties = "etherm.services.ingestion=http://ingestion")
 @AutoConfigureMockMvc
+@org.springframework.context.annotation.Import(com.openfinance.normalization.ServiceCaller.class)
 @AutoConfigureMockRestServiceServer
 class NormalizationControllerTest {
 

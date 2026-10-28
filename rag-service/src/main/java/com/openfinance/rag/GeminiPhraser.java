@@ -49,9 +49,10 @@ public class GeminiPhraser implements AnswerPhraser {
             if (draft != null && ClaudePhraser.isSafe(draft, facts, answer)) {
                 return new Phrasing(facts.fill(draft), model);
             }
-            log.warn("Model phrasing rejected, using template: {}", draft);
+            // Never the draft itself: it describes a customer's money.
+            log.warn("Model phrasing rejected, using template");
         } catch (IOException e) {
-            log.warn("Model phrasing failed, using template: {}", e.getMessage());
+            log.warn("Model phrasing failed ({}), using template", e.getClass().getSimpleName());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }

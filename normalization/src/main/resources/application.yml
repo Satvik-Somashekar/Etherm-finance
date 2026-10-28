@@ -14,3 +14,9 @@ management:
 etherm:
   services:
     ingestion: ${ETHERM_INGESTION_URL:http://localhost:8081}
+
+  security:
+    auth-key: ${ETHERM_AUTH_KEY:}
+    require-key: ${ETHERM_REQUIRE_AUTH_KEY:false}
+    # Records by consent id feed retrieval; customers see their accounts through /api/customers/{id}/accounts.
+    service-paths: [/api/consents/**]

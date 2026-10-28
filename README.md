@@ -40,7 +40,8 @@ this system supports maps to a filter, so embeddings were left out.
 | --- | --- | --- |
 | `data-generator` | | Seeded synthetic FI fetch responses for five FI types (deposits, mutual funds, insurance, EPF, equities), shaped like ReBIT AA schemas |
 | `fi-core` | | Shared model, per-type normalisers, consent scope checks, and the compute engine (`QueryEngine`) |
-| `ingestion` | 8081 | Stores raw FI data; simulated consent manager (create, approve, refresh, revoke); provider discovery |
+| `security` | | Shared by the four services: signed tokens, per-customer access checks, rate limits, body limits, security headers |
+| `ingestion` | 8081 | Sign-in; stores raw FI data; simulated consent manager (create, approve, refresh, revoke); provider discovery |
 | `normalization` | 8082 | Normalises raw accounts into one record model, per consent |
 | `retrieval` | 8083 | `POST /api/retrieve`: checks consents, then returns matching records |
 | `rag-service` | 8084 | `POST /api/query`: parse, retrieve, compute, phrase |
@@ -88,14 +89,23 @@ ETHERM_AS_OF=2026-10-25 java -jar rag-service/target/rag-service-0.0.1-SNAPSHOT.
 | `ANTHROPIC_API_KEY` | | Required when `ETHERM_PHRASING=claude` |
 | `GEMINI_API_KEY` | | Required when `ETHERM_PHRASING=gemini` |
 | `ETHERM_GEMINI_MODEL` | `gemini-3.5-flash` | Gemini model used for phrasing |
+| `ETHERM_AUTH_KEY` | public development key | Base64 key (32 bytes or more, e.g. `openssl rand -base64 32`) that signs sign-in and service tokens; must be the same in all four services |
+| `ETHERM_REQUIRE_AUTH_KEY` | `false` | `true` refuses to start without `ETHERM_AUTH_KEY` |
+| `ETHERM_DEMO_PASSCODE` | `etherm-demo` | The passcode every synthetic customer signs in with (ingestion) |
+| `ETHERM_SESSION_TTL` | `60m` | How long a sign-in token lasts |
+| `ETHERM_QUERY_RATE_LIMIT`, `ETHERM_CHAT_RATE_LIMIT` | `60`, `20` | Questions per minute per customer on `/api/query` and `/api/chat`; `0` turns the limit off (the evaluation needs this) |
 | `ETHERM_TURN_KEY` | made at start-up | Base64 key (32 bytes or more) that signs answers, so earlier turns can be checked; set it to keep conversations valid across restarts |
 
 ### Try it
 
 ```bash
-curl -s localhost:8084/api/query -H 'Content-Type: application/json' \
-  -d '{"customerId":"user001@etherm-aa","question":"Did my insurance premiums increase last quarter compared to the one before?"}'
+TOKEN=$(curl -s localhost:8081/api/session -H 'Content-Type: application/json' \
+  -d '{"customerId":"user001@etherm-aa","passcode":"etherm-demo"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
+curl -s localhost:8084/api/query -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
+  -d '{"question":"Did my insurance premiums increase last quarter compared to the one before?"}'
 ```
+
+Every request needs the token from sign-in, and it only works for that customer.
 
 The response has `answer` (the sentence), `figures` (the authoritative numbers), `breakdown`,
 `citations` (one per record used) and `grounding` (which consents were used and how many records
@@ -109,10 +119,12 @@ only.
 
 `evaluation/evaluate.py` computes the expected answer to each question in Python, straight from
 the raw FI JSON, without using any of the Java code. It then asks the running service and scores
-the response. Run it with the services up:
+the response. Run it with the services up and the per-customer rate limit off
+(`ETHERM_QUERY_RATE_LIMIT=0 ETHERM_CHAT_RATE_LIMIT=0` on rag-service); it signs in as each customer:
 
 ```bash
 python3 evaluation/evaluate.py
+python3 evaluation/redteam.py
 ```
 
 Latest results ([full report](evaluation/results/REPORT.md)):
@@ -196,6 +208,32 @@ filter is a keyword list, and the checks on replies are what the guarantee rests
   capabilities; compose publishes ports on 127.0.0.1 only. The Docker changes were not built here (no Docker
   daemon in this environment).
 
+### Access control
+
+- **Sign-in** (`POST /api/session` on ingestion) takes a customer id and passcode and returns a token valid
+  for an hour: `base64url(claims).HMAC-SHA256`, one fixed algorithm, signed with `ETHERM_AUTH_KEY`, which
+  every service holds. The passcode is kept only as a PBKDF2 hash (210,000 rounds) and compared in constant
+  time; an unknown customer gets the same answer as a wrong passcode; five failures lock a customer out for
+  fifteen minutes; sign-in is limited to 10 attempts a minute per address.
+- **Every endpoint** except sign-in and health needs a valid token (401 otherwise). A customer's token only
+  reaches that customer's providers, consents, accounts, answers, overview and exports, and only consents
+  they hold (403 otherwise). Loading fetch responses, listing customers, records by consent and retrieval
+  are for the services only; each service signs its own calls with a short-lived service token.
+- **Limits:** questions per minute per customer (60 typed, 20 chat), 300 requests a minute per customer
+  otherwise, request bodies up to 64 KB (2 MB for loading fetch responses), questions up to 1,000
+  characters and 12 earlier turns.
+- **Responses** carry `nosniff`, `DENY` framing, a `default-src 'none'` content security policy and
+  `no-store`. Errors from one service are passed on as their detail only, never the raw body, and logs say
+  why a model reply was refused but never what it said.
+- **Checked by** `security` module tests (tokens, filters, rate limits), `SessionAndAccessTest` (sign-in,
+  lockout, every consent endpoint across customers), `AccessTest` (questions, exports and consents across
+  customers, oversized requests) and the access rows of `evaluation/redteam.py`, where each customer's
+  session tries to reach the next customer's data through the running services: 40 of 40 refused.
+
+What this does not do yet: the passcode is shared by every demo customer, tokens cannot be revoked
+before they expire, rate-limit counters are per instance and in memory, and the services talk over plain
+HTTP inside one host.
+
 See [SECURITY.md](SECURITY.md) for how to report a problem.
 
 ## Frontend
@@ -210,9 +248,10 @@ See [SECURITY.md](SECURITY.md) for how to report a problem.
 | `/consent` | Consent & Security | Live consent ledger for the signed-in customer |
 | `/` | Dashboard | Live: net worth, allocation, a 12-month history rebuilt from transactions at today's prices (market moves are not reflected), recent activity, and three insights answered by the same pipeline as the Oracle (`GET /api/customers/{id}/overview`) |
 
-Sign-in is a demo picker for the five synthetic customers (`src/lib/session.ts`); no password is
-checked and the services still accept any customer id, so this is not access control yet. Each
-user's session reloads their own accounts, Dashboard and Oracle data.
+Sign-in lists the five synthetic customers and asks for the demo passcode, which ingestion checks
+before issuing a token (see Security testing). The token is kept in sessionStorage, sent with every
+request, and only works for that customer; when the services refuse it the app returns to sign-in.
+When the services are not running, sign-in still lets you in and the screens show mock data, as before.
 
 ### CSV exports
 
@@ -248,4 +287,5 @@ behaviour.
 - No embeddings or vector search (see above).
 - CI is defined in `.github/workflows/ci.yml`; its first runs are on the draft PRs, so treat it as new.
 - No persistence: the services keep data in memory and reload the synthetic data on restart.
-- No authentication: any caller can query any synthetic customer.
+- No real identity: every synthetic customer signs in with one shared demo passcode. The token checks
+  that follow are real; the passcode is a stand-in for an identity provider.

@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // Records the services' real responses for demo mode: node scripts/record-demo.mjs
-// Run with the four services up (ETHERM_AS_OF=2026-10-25) and the synthetic data loaded.
+// Run with the four services up (ETHERM_AS_OF=2026-10-25) and the synthetic data loaded. Signs in as each
+// customer with ETHERM_DEMO_PASSCODE (default etherm-demo). Answers are recorded without their turn signature,
+// which only the live services can check.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -15,8 +17,9 @@ const base = {
 }
 const normalise = (q) => q.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim()
 
-async function json(url, init) {
-  const res = await fetch(url, init)
+let token = null
+async function json(url, init = {}) {
+  const res = await fetch(url, { ...init, headers: { ...(init.headers ?? {}), Authorization: `Bearer ${token}` } })
   if (!res.ok) throw new Error(`${res.status} ${url}`)
   return res.json()
 }
@@ -25,6 +28,13 @@ mkdirSync(out, { recursive: true })
 for (let n = 1; n <= 5; n++) {
   const id = `user${String(n).padStart(3, '0')}@etherm-aa`
   const enc = encodeURIComponent(id)
+  const session = await fetch(`${base.ingestion}/api/session`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ customerId: id, passcode: process.env.ETHERM_DEMO_PASSCODE ?? 'etherm-demo' }),
+  })
+  if (!session.ok) throw new Error(`sign-in for ${id} failed: ${session.status}`)
+  token = (await session.json()).token
   const recording = {
     accounts: await json(`${base.normalization}/api/customers/${enc}/accounts`),
     fips: await json(`${base.ingestion}/api/customers/${enc}/fips`),
@@ -32,11 +42,13 @@ for (let n = 1; n <= 5; n++) {
     answers: {},
   }
   for (const question of questions) {
-    recording.answers[normalise(question)] = await json(`${base.rag}/api/query`, {
+    const { turnSignature, ...answer } = await json(`${base.rag}/api/query`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ customerId: id, question }),
     })
+    void turnSignature
+    recording.answers[normalise(question)] = answer
   }
   const file = join(out, `${id.split('@')[0]}.json`)
   writeFileSync(file, JSON.stringify(recording))

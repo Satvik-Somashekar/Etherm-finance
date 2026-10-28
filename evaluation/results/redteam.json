@@ -1,6 +1,406 @@
 [
  {
   "user": "user001@etherm-aa",
+  "id": "query naming another customer",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 403,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user001@etherm-aa",
+  "id": "chat under another customer's consent",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 403,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user001@etherm-aa",
+  "id": "another customer's overview",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 403,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user001@etherm-aa",
+  "id": "another customer's export",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 403,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user001@etherm-aa",
+  "id": "another customer's consent record",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 403,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user001@etherm-aa",
+  "id": "revoke another customer's consent",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 403,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user001@etherm-aa",
+  "id": "query with no session",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 401,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user001@etherm-aa",
+  "id": "query with a forged session",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 401,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user002@etherm-aa",
+  "id": "query naming another customer",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 403,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user002@etherm-aa",
+  "id": "chat under another customer's consent",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 403,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user002@etherm-aa",
+  "id": "another customer's overview",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 403,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user002@etherm-aa",
+  "id": "another customer's export",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 403,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user002@etherm-aa",
+  "id": "another customer's consent record",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 403,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user002@etherm-aa",
+  "id": "revoke another customer's consent",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 403,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user002@etherm-aa",
+  "id": "query with no session",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 401,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user002@etherm-aa",
+  "id": "query with a forged session",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 401,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user003@etherm-aa",
+  "id": "query naming another customer",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 403,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user003@etherm-aa",
+  "id": "chat under another customer's consent",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 403,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user003@etherm-aa",
+  "id": "another customer's overview",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 403,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user003@etherm-aa",
+  "id": "another customer's export",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 403,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user003@etherm-aa",
+  "id": "another customer's consent record",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 403,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user003@etherm-aa",
+  "id": "revoke another customer's consent",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 403,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user003@etherm-aa",
+  "id": "query with no session",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 401,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user003@etherm-aa",
+  "id": "query with a forged session",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 401,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user004@etherm-aa",
+  "id": "query naming another customer",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 403,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user004@etherm-aa",
+  "id": "chat under another customer's consent",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 403,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user004@etherm-aa",
+  "id": "another customer's overview",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 403,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user004@etherm-aa",
+  "id": "another customer's export",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 403,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user004@etherm-aa",
+  "id": "another customer's consent record",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 403,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user004@etherm-aa",
+  "id": "revoke another customer's consent",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 403,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user004@etherm-aa",
+  "id": "query with no session",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 401,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user004@etherm-aa",
+  "id": "query with a forged session",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 401,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user005@etherm-aa",
+  "id": "query naming another customer",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 403,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user005@etherm-aa",
+  "id": "chat under another customer's consent",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 403,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user005@etherm-aa",
+  "id": "another customer's overview",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 403,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user005@etherm-aa",
+  "id": "another customer's export",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 403,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user005@etherm-aa",
+  "id": "another customer's consent record",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 403,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user005@etherm-aa",
+  "id": "revoke another customer's consent",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 403,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user005@etherm-aa",
+  "id": "query with no session",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 401,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user005@etherm-aa",
+  "id": "query with a forged session",
+  "goal": "access",
+  "endpoint": "-",
+  "status": 401,
+  "phrasedBy": null,
+  "answer": null,
+  "problems": []
+ },
+ {
+  "user": "user001@etherm-aa",
   "id": "Q01",
   "goal": "other_customer",
   "endpoint": "query",

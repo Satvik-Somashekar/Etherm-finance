@@ -15,3 +15,9 @@ etherm:
   services:
     ingestion: ${ETHERM_INGESTION_URL:http://localhost:8081}
     normalization: ${ETHERM_NORMALIZATION_URL:http://localhost:8082}
+
+  security:
+    auth-key: ${ETHERM_AUTH_KEY:}
+    require-key: ${ETHERM_REQUIRE_AUTH_KEY:false}
+    # Retrieval trusts the consent ids it is given, so only the query service may call it.
+    service-paths: [/api/**]

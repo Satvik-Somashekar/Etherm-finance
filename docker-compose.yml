@@ -6,6 +6,10 @@
 # Every service: read-only root filesystem, no Linux capabilities, no privilege escalation, a small /tmp.
 x-service: &service
   restart: unless-stopped
+  # Every service checks tokens with the same key. Set ETHERM_AUTH_KEY (base64, 32+ bytes, e.g.
+  # `openssl rand -base64 32`) in the environment or an .env file; without it a public development key is used.
+  environment: &security
+    ETHERM_AUTH_KEY: ${ETHERM_AUTH_KEY:-}
   read_only: true
   tmpfs: ["/tmp:size=64m"]
   cap_drop: [ALL]
@@ -17,7 +21,9 @@ services:
     build: { context: ., args: { MODULE: ingestion } }
     ports: ["127.0.0.1:8081:8081"]
     environment:
+      <<: *security
       ETHERM_SEED_DIR: /data/synthetic
+      ETHERM_DEMO_PASSCODE: ${ETHERM_DEMO_PASSCODE:-etherm-demo}
     volumes:
       - ./data/synthetic:/data/synthetic:ro
 
@@ -26,6 +32,7 @@ services:
     build: { context: ., args: { MODULE: normalization } }
     ports: ["127.0.0.1:8082:8082"]
     environment:
+      <<: *security
       ETHERM_INGESTION_URL: http://ingestion:8081
     depends_on: [ingestion]
 
@@ -34,6 +41,7 @@ services:
     build: { context: ., args: { MODULE: retrieval } }
     ports: ["127.0.0.1:8083:8083"]
     environment:
+      <<: *security
       ETHERM_INGESTION_URL: http://ingestion:8081
       ETHERM_NORMALIZATION_URL: http://normalization:8082
     depends_on: [ingestion, normalization]
@@ -43,6 +51,7 @@ services:
     build: { context: ., args: { MODULE: rag-service } }
     ports: ["127.0.0.1:8084:8084"]
     environment:
+      <<: *security
       ETHERM_INGESTION_URL: http://ingestion:8081
       ETHERM_RETRIEVAL_URL: http://retrieval:8083
       # Pin "today" so relative periods ("last quarter") land inside the synthetic data window.

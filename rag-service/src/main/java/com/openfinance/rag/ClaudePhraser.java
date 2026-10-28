@@ -70,9 +70,10 @@ public class ClaudePhraser implements AnswerPhraser {
             if (draft != null && isSafe(draft, facts, answer)) {
                 return new Phrasing(facts.fill(draft), model);
             }
-            log.warn("Model phrasing rejected, using template: {}", draft);
+            // Never the draft itself: it describes a customer's money.
+            log.warn("Model phrasing rejected, using template");
         } catch (AnthropicException e) {
-            log.warn("Model phrasing failed, using template: {}", e.getMessage());
+            log.warn("Model phrasing failed ({}), using template", e.getClass().getSimpleName());
         }
         return fallback.phrase(question, answer);
     }

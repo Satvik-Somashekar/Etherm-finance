@@ -1,5 +1,7 @@
 package com.openfinance.normalization;
 
+import com.openfinance.security.Caller;
+import com.openfinance.security.UpstreamProblems;
 import com.openfinance.core.model.FinancialRecord;
 import com.openfinance.core.model.NormalizedAccount;
 import com.openfinance.core.normalize.NormalizationException;
@@ -36,13 +38,15 @@ public class NormalizationController {
 
     @GetMapping("/customers/{customerId}/accounts")
     public List<NormalizationService.AccountView> customerAccounts(@PathVariable String customerId) {
+        Caller.current().requireCustomer(customerId);
         return service.customerAccounts(customerId);
     }
 
     /** Passes ingestion's verdict through: a 403 for a revoked consent stays a 403. */
     @ExceptionHandler(HttpStatusCodeException.class)
     ProblemDetail upstream(HttpStatusCodeException e) {
-        return ProblemDetail.forStatusAndDetail(e.getStatusCode(), "ingestion: " + e.getResponseBodyAsString());
+        // Only the upstream problem's detail is passed on, never its raw body.
+        return ProblemDetail.forStatusAndDetail(e.getStatusCode(), "ingestion: " + UpstreamProblems.upstreamDetail(e));
     }
 
     @ExceptionHandler(NormalizationException.class)

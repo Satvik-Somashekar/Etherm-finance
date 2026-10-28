@@ -1,5 +1,8 @@
 package com.openfinance.rag;
 
+import com.openfinance.security.Caller;
+import com.openfinance.security.UpstreamProblems;
+import com.openfinance.core.consent.ConsentArtifact;
 import com.openfinance.core.consent.ConsentViolationException;
 import com.openfinance.core.model.Category;
 import com.openfinance.core.model.FiType;
@@ -21,6 +24,7 @@ import org.springframework.web.client.HttpStatusCodeException;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 import java.time.format.DateTimeParseException;
 
@@ -33,25 +37,66 @@ public class QueryController {
     private final ExportService exports;
     private final ChatService chat;
     private final TurnSigner signer;
+    private final UpstreamClients upstream;
+
+    /** Longest question, and most and longest earlier turns, a request may carry. */
+    static final int MAX_QUESTION = 1000;
+    static final int MAX_TURNS = 12;
+    static final int MAX_TURN = 4000;
 
     public QueryController(QueryService service, OverviewService overviews, ExportService exports, ChatService chat,
-                           TurnSigner signer) {
+                           TurnSigner signer, UpstreamClients upstream) {
         this.chat = chat;
         this.signer = signer;
+        this.upstream = upstream;
         this.service = service;
         this.overviews = overviews;
         this.exports = exports;
     }
 
     @PostMapping("/query")
-    public QueryResponse query(@RequestBody QueryRequest request) {
+    public QueryResponse query(@RequestBody QueryRequest body) {
+        checkSize(body.question(), body.history() == null ? 0 : body.history().size(),
+                body.history() == null ? List.of() : body.history());
+        String customer = authorise(body.customerId(), body.consentIds());
+        QueryRequest request = new QueryRequest(body.question(), customer, body.consentIds(), body.scope(), body.history());
         return signed(service.answer(request), TurnSigner.principal(request.customerId(), request.consentIds()));
     }
 
     /** Free conversation: the model looks figures up through tools when one is configured, else the typed-question path answers. */
     @PostMapping("/chat")
-    public QueryResponse chat(@RequestBody ChatRequest request) {
+    public QueryResponse chat(@RequestBody ChatRequest body) {
+        List<ChatRequest.Turn> turns = body.turns() == null ? List.of() : body.turns();
+        checkSize(body.question(), turns.size(), turns.stream().map(ChatRequest.Turn::text).toList());
+        String customer = authorise(body.customerId(), body.consentIds());
+        ChatRequest request = new ChatRequest(body.question(), customer, body.consentIds(), body.scope(), body.turns());
         return signed(chat.chat(request), TurnSigner.principal(request.customerId(), request.consentIds()));
+    }
+
+    /**
+     * The customer a question is about. A signed-in customer may only name themself, and may only name consents
+     * they hold; another Etherm service may name anyone. Returns the customer id to answer for.
+     */
+    private String authorise(String customerId, List<String> consentIds) {
+        Caller caller = Caller.current();
+        if (customerId != null && !customerId.isBlank()) {
+            caller.requireCustomer(customerId);
+        }
+        String customer = caller.customerOr(customerId);
+        if (!caller.service() && consentIds != null && !consentIds.isEmpty()) {
+            caller.requireOwned(consentIds, upstream.consents(customer).stream().map(ConsentArtifact::consentId).toList());
+        }
+        return customer;
+    }
+
+    private static void checkSize(String question, int turns, List<String> texts) {
+        if (question != null && question.length() > MAX_QUESTION) {
+            throw new IllegalArgumentException("questions are limited to " + MAX_QUESTION + " characters");
+        }
+        if (turns > MAX_TURNS || texts.stream().anyMatch(t -> t != null && t.length() > MAX_TURN)) {
+            throw new IllegalArgumentException("a request may carry at most " + MAX_TURNS + " earlier turns of "
+                    + MAX_TURN + " characters each");
+        }
     }
 
     private QueryResponse signed(QueryResponse response, String principal) {
@@ -60,6 +105,7 @@ public class QueryController {
 
     @GetMapping("/customers/{customerId}/overview")
     public OverviewResponse overview(@PathVariable String customerId) {
+        Caller.current().requireCustomer(customerId);
         return overviews.overview(customerId);
     }
 
@@ -70,6 +116,7 @@ public class QueryController {
                                                   @RequestParam(required = false) String to,
                                                   @RequestParam(required = false) String category,
                                                   @RequestParam(required = false) String fiType) {
+        Caller.current().requireCustomer(customerId);
         Set<Category> categories = EnumSet.noneOf(Category.class);
         if (category != null && !category.isBlank()) {
             for (String name : category.split(",")) {
@@ -91,6 +138,7 @@ public class QueryController {
     public ResponseEntity<String> reportCsv(@PathVariable String customerId,
                                             @RequestParam(required = false) String from,
                                             @RequestParam(required = false) String to) {
+        Caller.current().requireCustomer(customerId);
         return csv(exports.reportCsv(customerId, date(from), date(to)), "etherm-report.csv");
     }
 
@@ -122,6 +170,6 @@ public class QueryController {
 
     @ExceptionHandler(HttpStatusCodeException.class)
     ProblemDetail upstream(HttpStatusCodeException e) {
-        return ProblemDetail.forStatusAndDetail(e.getStatusCode(), "upstream: " + e.getResponseBodyAsString());
+        return ProblemDetail.forStatusAndDetail(e.getStatusCode(), "upstream: " + UpstreamProblems.upstreamDetail(e));
     }
 }

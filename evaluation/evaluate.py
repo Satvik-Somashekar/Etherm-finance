@@ -16,11 +16,14 @@ Decimal. Each question is then sent to the running rag-service and the response 
                 consent is refused
 
 Usage: python3 evaluation/evaluate.py [--url http://localhost:8084] [--as-of 2026-10-25]
-The services must run with the same as-of date (ETHERM_AS_OF), as docker-compose does.
+The services must run with the same as-of date (ETHERM_AS_OF), as docker-compose does, and with
+ETHERM_QUERY_RATE_LIMIT=0 so the per-customer rate limit does not slow the run. Each customer signs in with
+ETHERM_DEMO_PASSCODE (default etherm-demo).
 Standard library only.
 """
 
 import argparse
+import os
 import calendar
 import json
 import re
@@ -364,14 +367,37 @@ AMOUNT = re.compile(r"₹\s?([\d,]+(?:\.\d+)?)")
 PERCENT = re.compile(r"(-?[\d.]+)%")
 
 
-def post(url, body):
-    req = urllib.request.Request(url, json.dumps(body).encode(), {"Content-Type": "application/json"})
+TOKENS = {}
+
+
+def sign_in(ingestion, customer_id, passcode=None):
+    """A token for the customer, from the same sign-in the frontend uses; cached per customer."""
+    if customer_id not in TOKENS:
+        passcode = passcode or os.environ.get("ETHERM_DEMO_PASSCODE", "etherm-demo")
+        status, resp, _ = post(ingestion.rstrip("/") + "/api/session", {"customerId": customer_id, "passcode": passcode})
+        if status != 200:
+            sys.exit(f"sign-in for {customer_id} failed with HTTP {status}; is ETHERM_DEMO_PASSCODE right?")
+        TOKENS[customer_id] = resp["token"]
+    return TOKENS[customer_id]
+
+
+def post(url, body, token=None):
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request(url, json.dumps(body).encode(), headers)
     t0 = time.perf_counter()
-    try:
-        with urllib.request.urlopen(req, timeout=30) as r:
-            return r.status, json.loads(r.read()), time.perf_counter() - t0
-    except urllib.error.HTTPError as e:
-        return e.code, None, time.perf_counter() - t0
+    for _ in range(5):
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                return r.status, json.loads(r.read()), time.perf_counter() - t0
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                # Rate-limited: start the services with ETHERM_QUERY_RATE_LIMIT=0 for a full run.
+                time.sleep(int(e.headers.get("Retry-After", "1")))
+                continue
+            return e.code, None, time.perf_counter() - t0
+    return 429, None, time.perf_counter() - t0
 
 
 def figures(resp):
@@ -425,7 +451,7 @@ def main():
             body["consentIds"] = consent_ids
         else:
             body["customerId"] = user.customer_id
-        status, resp, secs = post(query, body)
+        status, resp, secs = post(query, body, sign_in(args.ingestion, user.customer_id))
         latencies.append(secs)
         return status, resp
 
@@ -449,13 +475,14 @@ def main():
     # --- consent lifecycle: a fresh consent answers, then is refused once revoked
     lifecycle = []
     for user in users[:2]:
+        token = sign_in(args.ingestion, user.customer_id)
         status, created = post(args.ingestion + "/api/consents", {
             "customerId": user.customer_id, "fiTypes": ["DEPOSIT"], "dataFrom": "2025-10-01",
-            "dataTo": "2026-09-30", "validForDays": 30})[:2]
+            "dataTo": "2026-09-30", "validForDays": 30}, token)[:2]
         cid = created["consentId"]
-        post(f"{args.ingestion}/api/consents/{cid}/approve", {})
+        post(f"{args.ingestion}/api/consents/{cid}/approve", {}, token)
         before, _ = ask(user, "How much did I spend last quarter?", [cid])
-        post(f"{args.ingestion}/api/consents/{cid}/revoke", {})
+        post(f"{args.ingestion}/api/consents/{cid}/revoke", {}, token)
         after, _ = ask(user, "How much did I spend last quarter?", [cid])
         lifecycle.append({"user": user.customer_id, "consent": cid, "status_before": before, "status_after": after,
                           "ok": before == 200 and after == 403})

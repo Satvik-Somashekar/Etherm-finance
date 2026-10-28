@@ -1,7 +1,7 @@
 /**
- * Who is signed in. Step 1 of login is a demo sign-in: the five synthetic customers are listed on
- * the sign-in page and picking one starts a session. Nothing here is a credential check, and the
- * services still accept any customer id; server-side tokens come in a later step.
+ * Who is signed in. The five synthetic customers are listed on the sign-in page; signing in as one sends the
+ * customer id and the demo passcode to ingestion, which returns a signed token that every service checks.
+ * The services then answer for that customer only.
  */
 
 export interface DemoUser {
@@ -19,22 +19,42 @@ export const DEMO_USERS: DemoUser[] = [
   { id: 'user005@etherm-aa', name: 'Kabir Menon', email: 'kabir.menon@example.com' },
 ]
 
-const STORAGE_KEY = 'etherm.session.v1'
+const STORAGE_KEY = 'etherm.session.v2'
 
-/** The signed-in user, or null. Storage can be blocked or hold junk, so both mean signed out. */
-export function loadSession(): DemoUser | null {
+/**
+ * What is kept between page loads: who is signed in and the token the services issued for them. It lives in
+ * sessionStorage, so it ends when the tab closes, and the token itself expires (an hour by default).
+ * A null token means the services were not reachable at sign-in and the app is showing mock data.
+ */
+interface StoredSession {
+  id: string
+  token: string | null
+  expiresAt: string | null
+}
+
+function read(): StoredSession | null {
   try {
-    const id = window.localStorage.getItem(STORAGE_KEY)
-    return DEMO_USERS.find((u) => u.id === id) ?? null
+    const raw = window.sessionStorage.getItem(STORAGE_KEY)
+    if (!raw) return null
+    const stored = JSON.parse(raw) as StoredSession
+    if (stored.expiresAt && Date.parse(stored.expiresAt) <= Date.now()) return null
+    return stored
   } catch {
     return null
   }
 }
 
-export function saveSession(user: DemoUser | null): void {
+/** The signed-in user, or null. Storage can be blocked or hold junk, so both mean signed out. */
+export function loadSession(): DemoUser | null {
+  const stored = read()
+  return DEMO_USERS.find((u) => u.id === stored?.id) ?? null
+}
+
+export function saveSession(user: DemoUser | null, token: string | null = null, expiresAt: string | null = null): void {
   try {
-    if (user) window.localStorage.setItem(STORAGE_KEY, user.id)
-    else window.localStorage.removeItem(STORAGE_KEY)
+    window.localStorage.removeItem('etherm.session.v1')
+    if (user) window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ id: user.id, token, expiresAt }))
+    else window.sessionStorage.removeItem(STORAGE_KEY)
   } catch {
     // Storage unavailable: the session lasts until the page is closed.
   }
@@ -42,3 +62,9 @@ export function saveSession(user: DemoUser | null): void {
 
 /** Read by the API client on every call, so a switch of user never reuses the old id. */
 export const currentCustomerId = (): string => loadSession()?.id ?? DEMO_USERS[0].id
+
+/** The bearer token for the signed-in customer, if the services issued one. */
+export const currentToken = (): string | null => read()?.token ?? null
+
+/** Fired when the services refuse the token (expired or invalid), so the app can return to sign-in. */
+export const SIGNED_OUT_EVENT = 'etherm:signed-out'
