@@ -1,0 +1,98 @@
+# Build, tests, the accuracy evaluation, the red-team suites and supply-chain checks on every push and PR.
+# GitHub's dependency-review action is not used: it needs the dependency graph (and, for a private repository,
+# Advanced Security) turned on in the repository settings. npm audit and the Maven enforcer cover new dependencies.
+# Every action is pinned to a full commit SHA (the tag is in the comment) so a moved tag cannot change what runs;
+# Dependabot proposes updates. The workflow can only read the repository.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    name: Secret scan (whole history)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 scripts/test_secret_scan.py
+      - run: python3 scripts/secret-scan.py --history
+
+  backend:
+    name: Backend build, tests and evaluation
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      # verify runs the enforcer rules (pinned plugins, banned libraries, converging versions) and every test,
+      # including RedTeamTest; -Psbom also writes the CycloneDX bill of materials.
+      - run: mvn -B -ntp -Psbom verify
+      - name: Generate the synthetic data
+        run: mvn -B -ntp -q -pl data-generator exec:java -Dexec.args="--users 5 --seed 42 --out $PWD/data/synthetic"
+      - name: Start the services
+        run: |
+          ETHERM_SEED_DIR=$PWD/data/synthetic nohup java -jar ingestion/target/ingestion-0.0.1-SNAPSHOT.jar > ingestion.log 2>&1 &
+          nohup java -jar normalization/target/normalization-0.0.1-SNAPSHOT.jar > normalization.log 2>&1 &
+          nohup java -jar retrieval/target/retrieval-0.0.1-SNAPSHOT.jar > retrieval.log 2>&1 &
+          ETHERM_AS_OF=2026-10-25 nohup java -jar rag-service/target/rag-service-0.0.1-SNAPSHOT.jar > rag-service.log 2>&1 &
+          for i in $(seq 1 90); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' localhost:8084/api/query -H 'Content-Type: application/json' \
+              -d '{"customerId":"user001@etherm-aa","question":"What is my balance?"}' || true)
+            [ "$code" = "200" ] && exit 0
+            sleep 2
+          done
+          tail -n 50 *.log
+          exit 1
+      - name: Accuracy evaluation
+        run: python3 evaluation/evaluate.py --out "$RUNNER_TEMP/eval"
+      - name: Live red-team
+        run: python3 evaluation/redteam.py --out "$RUNNER_TEMP/eval"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: backend-reports
+          path: |
+            ${{ runner.temp }}/eval/*.md
+            rag-service/target/redteam-report.md
+            target/classes/META-INF/sbom/application.cdx.json
+          if-no-files-found: ignore
+
+  frontend:
+    name: Frontend lint, build and audit
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      # npm ci installs exactly what the lockfile says and checks each package's integrity hash.
+      - run: npm ci
+      - run: npm audit --audit-level=high
+      - run: npm run lint
+      - run: npm run build
+      - run: npm run build:demo
+      - run: npm sbom --sbom-format cyclonedx --omit dev > "$RUNNER_TEMP/frontend.cdx.json"

@@ -1,15 +1,21 @@
 # Runs the four backend services on their usual ports with the synthetic data mounted.
 # Prerequisites: `mvn clean install` (builds the jars) and the data generator (fills data/synthetic).
 # The frontend runs on the host with `npm --prefix frontend run dev`; its proxy targets localhost:8081-8084.
+# Ports are published on 127.0.0.1 only, so the services are not reachable from other machines.
 
+# Every service: read-only root filesystem, no Linux capabilities, no privilege escalation, a small /tmp.
 x-service: &service
   restart: unless-stopped
+  read_only: true
+  tmpfs: ["/tmp:size=64m"]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
 
 services:
   ingestion:
     <<: *service
     build: { context: ., args: { MODULE: ingestion } }
-    ports: ["8081:8081"]
+    ports: ["127.0.0.1:8081:8081"]
     environment:
       ETHERM_SEED_DIR: /data/synthetic
     volumes:
@@ -18,7 +24,7 @@ services:
   normalization:
     <<: *service
     build: { context: ., args: { MODULE: normalization } }
-    ports: ["8082:8082"]
+    ports: ["127.0.0.1:8082:8082"]
     environment:
       ETHERM_INGESTION_URL: http://ingestion:8081
     depends_on: [ingestion]
@@ -26,7 +32,7 @@ services:
   retrieval:
     <<: *service
     build: { context: ., args: { MODULE: retrieval } }
-    ports: ["8083:8083"]
+    ports: ["127.0.0.1:8083:8083"]
     environment:
       ETHERM_INGESTION_URL: http://ingestion:8081
       ETHERM_NORMALIZATION_URL: http://normalization:8082
@@ -35,7 +41,7 @@ services:
   rag-service:
     <<: *service
     build: { context: ., args: { MODULE: rag-service } }
-    ports: ["8084:8084"]
+    ports: ["127.0.0.1:8084:8084"]
     environment:
       ETHERM_INGESTION_URL: http://ingestion:8081
       ETHERM_RETRIEVAL_URL: http://retrieval:8083

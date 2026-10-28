@@ -31,4 +31,88 @@
     <properties>
         <java.version>21</java.version>
     </properties>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <!-- Not managed by Spring Boot; pinned so requirePluginVersions holds for the site lifecycle too. -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-site-plugin</artifactId>
+                    <version>3.22.0</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+        <plugins>
+            <!-- Fails the build on an unpinned plugin, a duplicated dependency or a library with a known critical flaw. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>supply-chain</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <requireMavenVersion>
+                                    <version>[3.9,)</version>
+                                </requireMavenVersion>
+                                <requireJavaVersion>
+                                    <version>[21,)</version>
+                                </requireJavaVersion>
+                                <requirePluginVersions>
+                                    <message>Pin every plugin version so a build cannot change underneath us.</message>
+                                </requirePluginVersions>
+                                <banDuplicatePomDependencyVersions/>
+                                <dependencyConvergence/>
+                                <bannedDependencies>
+                                    <excludes>
+                                        <!-- Log4Shell and its follow-ups -->
+                                        <exclude>org.apache.logging.log4j:log4j-core:[,2.17.1)</exclude>
+                                        <!-- Deserialisation gadget chains -->
+                                        <exclude>commons-collections:commons-collections:[,3.2.2)</exclude>
+                                        <!-- Text4Shell -->
+                                        <exclude>org.apache.commons:commons-text:[,1.10.0)</exclude>
+                                        <!-- Unmaintained, with remote code execution flaws -->
+                                        <exclude>log4j:log4j</exclude>
+                                    </excludes>
+                                </bannedDependencies>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+    <profiles>
+        <!-- mvn -Psbom package writes a CycloneDX bill of materials (target/classes/META-INF/sbom/application.cdx.json):
+             one per module, and the parent's covers all of them. -->
+        <profile>
+            <id>sbom</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.cyclonedx</groupId>
+                        <artifactId>cyclonedx-maven-plugin</artifactId>
+                        <version>2.9.3</version>
+                        <executions>
+                            <execution>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>makeAggregateBom</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <outputFormat>json</outputFormat>
+                            <includeTestScope>false</includeTestScope>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

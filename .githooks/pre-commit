@@ -1,0 +1,3 @@
+#!/bin/sh
+# Refuses a commit that would add a credential. Enable once per clone: git config core.hooksPath .githooks
+exec python3 "$(git rev-parse --show-toplevel)/scripts/secret-scan.py" --staged
