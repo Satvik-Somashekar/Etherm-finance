@@ -41,6 +41,15 @@ jobs:
           distribution: temurin
           java-version: "21"
           cache: maven
+      # The runner image ships PostgreSQL 16; the secure-store tests create a throwaway database in it.
+      - name: Start PostgreSQL
+        run: |
+          sudo systemctl start postgresql.service
+          pw=$(openssl rand -hex 16)
+          echo "::add-mask::$pw"
+          sudo -u postgres psql -q -c "CREATE ROLE etherm_admin LOGIN SUPERUSER PASSWORD '$pw'"
+          echo "ETHERM_TEST_PG_ADMIN_URL=jdbc:postgresql://localhost:5432/postgres?user=etherm_admin&password=$pw" >> "$GITHUB_ENV"
+          echo "ETHERM_REQUIRE_PG_TESTS=true" >> "$GITHUB_ENV"
       # verify runs the enforcer rules (pinned plugins, banned libraries, converging versions) and every test,
       # including RedTeamTest; -Psbom also writes the CycloneDX bill of materials.
       - run: mvn -B -ntp -Psbom verify

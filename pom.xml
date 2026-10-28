@@ -22,6 +22,7 @@
     <modules>
         <module>fi-core</module>
         <module>security</module>
+        <module>secure-store</module>
         <module>data-generator</module>
         <module>ingestion</module>
         <module>normalization</module>
