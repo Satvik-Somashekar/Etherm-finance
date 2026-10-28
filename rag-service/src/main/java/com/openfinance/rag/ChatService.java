@@ -82,7 +82,8 @@ public class ChatService {
                 return reply;
             }
         } catch (IOException | RuntimeException e) {
-            log.warn("Chat model failed, answering with the typed-question path: {}", e.getMessage());
+            // The exception type only: a message can quote the model's output, which can quote customer data.
+            log.warn("Chat model failed ({}), answering with the typed-question path", e.getClass().getSimpleName());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -157,7 +158,8 @@ public class ChatService {
             if (problem == null) {
                 return respond(request, sheet.fill(draft), calls, consentIds, today);
             }
-            log.warn("Chat reply rejected ({}): {}", problem, draft);
+            // Logs say why a reply was refused, never what it said: replies are about a customer's money.
+            log.warn("Chat reply rejected: {}", problem.replaceAll("\\s*\\(.*\\)", ""));
             if (retried) {
                 break;
             }

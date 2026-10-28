@@ -1,5 +1,6 @@
 package com.openfinance.retrieval;
 
+import com.openfinance.security.UpstreamProblems;
 import com.openfinance.core.consent.ConsentViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -37,6 +38,6 @@ public class RetrievalController {
 
     @ExceptionHandler(HttpStatusCodeException.class)
     ProblemDetail upstream(HttpStatusCodeException e) {
-        return ProblemDetail.forStatusAndDetail(e.getStatusCode(), "upstream: " + e.getResponseBodyAsString());
+        return ProblemDetail.forStatusAndDetail(e.getStatusCode(), "upstream: " + UpstreamProblems.upstreamDetail(e));
     }
 }

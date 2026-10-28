@@ -1,6 +1,6 @@
 import type { ConsentArtifact, FipAccount, FiType, Insight, Transaction } from '../types/fi'
 import type { FipCandidate } from '../data/mock'
-import { currentCustomerId } from './session'
+import { currentCustomerId, currentToken, SIGNED_OUT_EVENT } from './session'
 import { ApiError } from './errors'
 import { DEMO, demoCall } from './demo'
 
@@ -23,12 +23,24 @@ export const fipName = (fipId: string) => FIP_NAMES[fipId] ?? fipId
 
 export { ApiError } from './errors'
 
+/** The signed-in customer's token, for every request to the services. */
+function authHeaders(): Record<string, string> {
+  const token = currentToken()
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+/** A refused token means the session is over (expired or the services restarted with a new key). */
+function checkSession(response: Response) {
+  if (response.status === 401) window.dispatchEvent(new Event(SIGNED_OUT_EVENT))
+}
+
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   if (DEMO) return demoCall<T>(path, init)
   const response = await fetch(path, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+    headers: { 'Content-Type': 'application/json', ...authHeaders(), ...(init?.headers ?? {}) },
   })
+  checkSession(response)
   if (!response.ok) {
     let detail = response.statusText
     try {
@@ -39,6 +51,42 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(response.status, detail)
   }
   return (await response.json()) as T
+}
+
+export interface SignedIn {
+  customerId: string
+  token: string | null
+  expiresAt: string | null
+}
+
+/**
+ * Signs in with the demo passcode and returns the token the services will check. When the services are not
+ * running (network error or a 5xx from the dev proxy), it returns no token so the app can show its mock data,
+ * as before; a wrong passcode is an error. The public demo has no services, so it never sends anything.
+ */
+export async function signIn(customerId: string, passcode: string): Promise<SignedIn> {
+  if (DEMO) return { customerId, token: null, expiresAt: null }
+  let response: Response
+  try {
+    response = await fetch('/svc/ingestion/api/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customerId, passcode }),
+    })
+  } catch {
+    return { customerId, token: null, expiresAt: null }
+  }
+  if (response.status >= 500) return { customerId, token: null, expiresAt: null }
+  if (!response.ok) {
+    let detail = response.statusText
+    try {
+      detail = ((await response.json()) as { detail?: string }).detail ?? detail
+    } catch {
+      // Body was not JSON; keep the status text.
+    }
+    throw new ApiError(response.status, detail)
+  }
+  return (await response.json()) as SignedIn
 }
 
 export type ExportKind = 'transactions' | 'report'
@@ -58,7 +106,8 @@ export async function downloadExport(
   if (range.categories?.length) query.set('category', range.categories.join(','))
   if (range.fiTypes?.length) query.set('fiType', range.fiTypes.join(','))
   const path = `/svc/rag/api/customers/${encodeURIComponent(currentCustomerId())}/export/${kind}.csv`
-  const response = await fetch(query.size ? `${path}?${query}` : path)
+  const response = await fetch(query.size ? `${path}?${query}` : path, { headers: authHeaders() })
+  checkSession(response)
   if (!response.ok) {
     let detail = response.statusText
     try {

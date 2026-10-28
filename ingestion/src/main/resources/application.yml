@@ -15,3 +15,18 @@ etherm:
   ingestion:
     # Directory of generated FI fetch responses loaded at startup; empty disables seeding.
     seed-dir: ${ETHERM_SEED_DIR:../data/synthetic}
+  session:
+    # Shared by every synthetic customer; see SessionController. Tokens last this long.
+    demo-passcode: ${ETHERM_DEMO_PASSCODE:etherm-demo}
+    ttl: ${ETHERM_SESSION_TTL:60m}
+  security:
+    auth-key: ${ETHERM_AUTH_KEY:}
+    require-key: ${ETHERM_REQUIRE_AUTH_KEY:false}
+    public-paths: [/actuator/health, /actuator/health/**, /error, /api/session]
+    # Loading fetch responses and listing every customer are for the services, not for a signed-in customer.
+    service-paths: [/api/fi/**, /api/customers]
+    # A fetch response (about 200 KB per synthetic customer) is the largest body any service accepts.
+    max-body-bytes: 2097152
+    rate-limits:
+      "[/api/session]": 10
+      "[/**]": 600

@@ -47,15 +47,25 @@ jobs:
       - name: Generate the synthetic data
         run: mvn -B -ntp -q -pl data-generator exec:java -Dexec.args="--users 5 --seed 42 --out $PWD/data/synthetic"
       - name: Start the services
+        env:
+          # A key made for this run only, shared by the four services; no rate limit so the evaluation runs at full speed.
+          ETHERM_QUERY_RATE_LIMIT: "0"
+          ETHERM_CHAT_RATE_LIMIT: "0"
+          ETHERM_REQUIRE_AUTH_KEY: "true"
         run: |
+          export ETHERM_AUTH_KEY=$(openssl rand -base64 32)
           ETHERM_SEED_DIR=$PWD/data/synthetic nohup java -jar ingestion/target/ingestion-0.0.1-SNAPSHOT.jar > ingestion.log 2>&1 &
           nohup java -jar normalization/target/normalization-0.0.1-SNAPSHOT.jar > normalization.log 2>&1 &
           nohup java -jar retrieval/target/retrieval-0.0.1-SNAPSHOT.jar > retrieval.log 2>&1 &
           ETHERM_AS_OF=2026-10-25 nohup java -jar rag-service/target/rag-service-0.0.1-SNAPSHOT.jar > rag-service.log 2>&1 &
           for i in $(seq 1 90); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' localhost:8084/api/query -H 'Content-Type: application/json' \
-              -d '{"customerId":"user001@etherm-aa","question":"What is my balance?"}' || true)
-            [ "$code" = "200" ] && exit 0
+            token=$(curl -sf localhost:8081/api/session -H 'Content-Type: application/json' \
+              -d '{"customerId":"user001@etherm-aa","passcode":"etherm-demo"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])' || true)
+            if [ -n "$token" ]; then
+              code=$(curl -s -o /dev/null -w '%{http_code}' localhost:8084/api/query -H 'Content-Type: application/json' \
+                -H "Authorization: Bearer $token" -d '{"question":"What is my balance?"}' || true)
+              [ "$code" = "200" ] && exit 0
+            fi
             sleep 2
           done
           tail -n 50 *.log

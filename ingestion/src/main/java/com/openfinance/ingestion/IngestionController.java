@@ -1,5 +1,6 @@
 package com.openfinance.ingestion;
 
+import com.openfinance.security.Caller;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.openfinance.core.model.FiType;
 import org.springframework.http.HttpStatus;
@@ -46,6 +47,7 @@ public class IngestionController {
      */
     @GetMapping("/customers/{customerId}/fips")
     public List<DiscoveredAccount> discover(@PathVariable String customerId) {
+        Caller.current().requireCustomer(customerId);
         return store.accounts(customerId).stream()
                 .map(a -> new DiscoveredAccount(a.fipId(), a.fiType(), a.linkRefNumber(), a.maskedAccNumber()))
                 .toList();

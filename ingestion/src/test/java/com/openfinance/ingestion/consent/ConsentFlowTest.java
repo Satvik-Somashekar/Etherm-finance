@@ -22,6 +22,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(properties = "etherm.ingestion.seed-dir=")
 @AutoConfigureMockMvc
+@org.springframework.context.annotation.Import(com.openfinance.ingestion.ServiceCaller.class)
 class ConsentFlowTest {
 
     @Autowired

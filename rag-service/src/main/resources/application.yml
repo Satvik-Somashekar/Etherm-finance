@@ -23,3 +23,13 @@ etherm:
   query:
     # Fix "today" for relative periods such as "last quarter"; empty means the real date.
     as-of: ${ETHERM_AS_OF:}
+
+  security:
+    auth-key: ${ETHERM_AUTH_KEY:}
+    require-key: ${ETHERM_REQUIRE_AUTH_KEY:false}
+    # Requests per minute per customer: the chat can call a paid model several times per question.
+    # The evaluation asks hundreds of questions per customer, so it runs with these set to 0 (no limit).
+    rate-limits:
+      "[/api/chat]": ${ETHERM_CHAT_RATE_LIMIT:20}
+      "[/api/query]": ${ETHERM_QUERY_RATE_LIMIT:60}
+      "[/**]": 300
